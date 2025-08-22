@@ -1,4 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+// Theme colors
+const THEMES = {
+  dark: {
+    bg: "#0f1420",
+    text: "#d9e2ee",
+    border: "#1e2633",
+  },
+  light: {
+    bg: "#f8fafc",
+    text: "#222",
+    border: "#d1d5db",
+  },
+};
 import { createChart, CrosshairMode } from "lightweight-charts";
 import { TrendingUp, Activity, RefreshCw, Settings, AlertTriangle } from "lucide-react";
 
@@ -205,8 +218,19 @@ export default function Component() {
   });
   const [show, setShow] = useState({ ema20: true, ema50: true, rsi: true, macd: true });
   const [err, setErr] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState("dark");
+
+  // Responsive: detect prefers-color-scheme
+  useEffect(() => {
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      setTheme("light");
+    }
+  }, []);
+
   async function fetchSnapshot() {
     setErr(null);
+    setLoading(true);
     try {
       const [cgRes, globalRes, fngRes] = await Promise.allSettled([
         j(
@@ -298,6 +322,7 @@ export default function Component() {
     } catch (e) {
       setErr(e?.message || "Fetch error");
     }
+    setLoading(false);
   }
 
   async function fetchChart() {
@@ -376,26 +401,46 @@ export default function Component() {
     return parts.join(", ") + head;
   }, [state]);
 
+  // Tooltip helper
+  const Tooltip = ({ text }) => (
+    <span className="ml-1 cursor-help" aria-label={text} title={text}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline align-text-bottom text-slate-400"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="8"/></svg>
+    </span>
+  );
+
   return (
-    <div className="w-full max-w-5xl mx-auto p-4 text-slate-100">
-      <div className="flex items-center justify-between gap-3 mb-3">
+    <div
+      className={`w-full max-w-5xl mx-auto p-4 ${theme === "dark" ? "text-slate-100" : "text-slate-900"}`}
+      aria-label="BTC Pulse Dashboard"
+      style={{ background: THEMES[theme].bg, color: THEMES[theme].text }}
+    >
+  <div className="flex items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-5 h-5 opacity-80" />
           <h1 className="text-lg font-black tracking-tight">
             BTC Pulse — Interactive (Patched)
           </h1>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-400">
+  <div className={`flex items-center gap-2 text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
           <button
+            aria-label="Refresh dashboard"
             onClick={() => {
+              setLoading(true);
               fetchSnapshot();
               fetchChart();
             }}
-            className="px-2.5 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800/60 flex items-center gap-1"
+            className={`px-2.5 py-1.5 rounded-lg border ${theme === "dark" ? "border-slate-700 hover:bg-slate-800/60" : "border-slate-300 hover:bg-slate-200/60"} flex items-center gap-1`}
           >
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
-          <span>{now.toLocaleTimeString()}</span>
+          <button
+            aria-label="Toggle theme"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className={`px-2 py-1 rounded border ${theme === "dark" ? "border-slate-700 text-slate-300" : "border-slate-300 text-slate-700"}`}
+          >
+            {theme === "dark" ? "Light" : "Dark"} Mode
+          </button>
+          <span aria-label="Last updated time">{now.toLocaleTimeString()}</span>
         </div>
       </div>
 
@@ -406,10 +451,10 @@ export default function Component() {
         </div>
       )}
 
-      <p className="text-sm text-slate-300 mb-3">{oneLiner}</p>
+  <p className="text-sm text-slate-300 mb-3" aria-label="BTC summary">{oneLiner}</p>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-slate-400">Indicators:</span>
+      <div className={`mb-3 flex flex-wrap items-center gap-2 text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+        <span>Indicators:</span>
         <button
           onClick={() => setShow((s) => ({ ...s, ema20: !s.ema20 }))}
           className={`px-2 py-1 rounded border ${show.ema20 ? "border-sky-500 text-sky-300" : "border-slate-700 text-slate-400"}`}
@@ -444,7 +489,7 @@ export default function Component() {
 
       {show.rsi && (
         <div className="mt-3">
-          <div className="flex items-center gap-2 mb-1 text-xs text-slate-400">
+          <div className={`flex items-center gap-2 mb-1 text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
             <Activity className="w-3.5 h-3.5" /> RSI(14)
           </div>
           <LinePanel series={series.rsi} color="#9b59b6" height={110} bands={[30, 70]} />
@@ -452,7 +497,7 @@ export default function Component() {
       )}
       {show.macd && (
         <div className="mt-3">
-          <div className="flex items-center gap-2 mb-1 text-xs text-slate-400">
+          <div className={`flex items-center gap-2 mb-1 text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
             <Settings className="w-3.5 h-3.5" /> MACD(12,26,9)
           </div>
           <LinePanel series={series.macdLine} color="#2ecc71" height={90} />
@@ -461,8 +506,8 @@ export default function Component() {
         </div>
       )}
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-slate-700/70">
-        <table className="min-w-full text-sm">
+  <div className={`mt-4 overflow-x-auto rounded-xl border ${theme === "dark" ? "border-slate-700/70" : "border-slate-300/70"}`}>
+        <table className="min-w-full text-sm" aria-label="BTC metrics table">
           <thead>
             <tr className="bg-slate-900/60 text-slate-300">
               <th className="text-left p-2">Metric</th>
@@ -471,19 +516,19 @@ export default function Component() {
           </thead>
           <tbody className="divide-y divide-slate-800/80">
             <tr>
-              <td className="p-2 text-slate-400">Spot price</td>
+              <td className="p-2 text-slate-400">Spot price <Tooltip text="Current BTC spot price from CoinGecko" /></td>
               <td className="p-2 font-semibold">
                 {fmtUSD(state.price, state.price > 1000 ? 0 : 2)}
               </td>
             </tr>
             <tr>
-              <td className="p-2 text-slate-400">1h / 24h change</td>
+              <td className="p-2 text-slate-400">1h / 24h change <Tooltip text="Price change in last 1h and 24h" /></td>
               <td className="p-2 font-semibold">
                 {fmtPct(state.chg1h)} / {fmtPct(state.chg24h)}
               </td>
             </tr>
             <tr>
-              <td className="p-2 text-slate-400">Funding (BTCUSDT)</td>
+              <td className="p-2 text-slate-400">Funding (BTCUSDT) <Tooltip text="Binance perpetual funding rate" /></td>
               <td className="p-2 font-semibold">
                 {state.funding?.last != null
                   ? `${state.funding.last.toFixed(4)}%`
@@ -498,7 +543,7 @@ export default function Component() {
               </td>
             </tr>
             <tr>
-              <td className="p-2 text-slate-400">Liquidations (last 4h)</td>
+              <td className="p-2 text-slate-400">Liquidations (last 4h) <Tooltip text="Total liquidations on Binance futures in last 4h" /></td>
               <td className="p-2 font-semibold">
                 {state.liqs?.totalUSD != null ? (
                   <>
@@ -514,7 +559,7 @@ export default function Component() {
               </td>
             </tr>
             <tr>
-              <td className="p-2 text-slate-400">BTC dominance</td>
+              <td className="p-2 text-slate-400">BTC dominance <Tooltip text="BTC market cap dominance" /></td>
               <td className="p-2 font-semibold">
                 {state.dominance != null
                   ? `${state.dominance.toFixed(2)}%`
@@ -522,13 +567,13 @@ export default function Component() {
               </td>
             </tr>
             <tr>
-              <td className="p-2 text-slate-400">Fear & Greed Index</td>
+              <td className="p-2 text-slate-400">Fear & Greed Index <Tooltip text="Sentiment index from Alternative.me" /></td>
               <td className="p-2 font-semibold">
                 {state.fearGreed != null ? state.fearGreed : "—"}
               </td>
             </tr>
             <tr>
-              <td className="p-2 text-slate-400">Top driver headline</td>
+              <td className="p-2 text-slate-400">Top driver headline <Tooltip text="Most upvoted recent Reddit headline" /></td>
               <td className="p-2 font-semibold">
                 {state.headline ?? (
                   <span className="text-slate-400">(unavailable)</span>
@@ -539,7 +584,16 @@ export default function Component() {
         </table>
       </div>
 
-      <div className="mt-3 text-xs text-slate-400">
+      {loading && (
+        <div className="flex items-center justify-center mt-4" role="status" aria-live="polite">
+          <svg className={`animate-spin h-6 w-6 ${theme === "dark" ? "text-sky-400" : "text-sky-600"}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+          </svg>
+          <span className={`ml-2 ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>Loading data...</span>
+        </div>
+      )}
+      <div className={`mt-3 text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
         Data: CoinGecko (spot & dominance), Binance (funding & liquidations, best‑effort),
         Reddit (headline), Alternative.me (F&G). Auto‑refresh 60s.
       </div>
