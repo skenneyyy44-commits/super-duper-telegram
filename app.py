@@ -1,5 +1,6 @@
 import os
 from flask import Flask, jsonify, send_from_directory
+from commute import generate_commute_data
 
 
 class DataManager:
@@ -36,6 +37,11 @@ def create_app():
     @app.route('/healthz')
     def health():
         return jsonify({"ok": True}), 200
+
+    @app.route('/api/commute')
+    def commute_summary():
+        """Provide a simulated predictive commute summary."""
+        return jsonify(generate_commute_data())
 
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
