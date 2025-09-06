@@ -2,7 +2,7 @@ import folium
 import requests
 import webbrowser
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 USGS_URL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson"
 
@@ -35,18 +35,26 @@ def plot_quakes():
     m = folium.Map(location=[0, 0], zoom_start=2)
 
     # Add markers for each earthquake
-    for feature in data['features']:
-        properties = feature['properties']
-        coords = feature['geometry']['coordinates']
+    for feature in data.get('features', []):
+        properties = feature.get('properties')
+        geometry = feature.get('geometry')
+
+        if not all([properties, geometry]):
+            continue
+
+        coords = geometry.get('coordinates')
+        mag = properties.get('mag')
+        place = properties.get('place')
+        time_ms = properties.get('time')
+
+        if not all([coords, mag, place, time_ms]):
+            continue
 
         # GeoJSON coordinates are [longitude, latitude, depth]
         lon, lat, depth = coords
-        mag = properties['mag']
-        place = properties['place']
 
         # Format the time for the popup
-        time_ms = properties['time']
-        time_str = datetime.utcfromtimestamp(time_ms / 1000).strftime('%Y-%m-%d %H:%M:%S UTC')
+        time_str = datetime.fromtimestamp(time_ms / 1000, tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
 
         # Create a popup with detailed information
         popup_html = f"""
