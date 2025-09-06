@@ -2,7 +2,24 @@ import os
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from app import create_app
+from app import create_app, data_manager
+
+
+def test_singleton_data_manager():
+    # Verify that the same instance of DataManager is used across app instances.
+    assert data_manager.started is False
+    app1 = create_app()
+    assert data_manager.started is True
+    app2 = create_app()
+    assert data_manager.started is True
+
+    with app1.app_context():
+        pass
+    assert data_manager.started is False
+
+    with app2.app_context():
+        pass
+    assert data_manager.started is False
 
 
 def test_healthz():

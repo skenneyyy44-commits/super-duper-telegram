@@ -15,6 +15,9 @@ class DataManager:
         self.started = False
 
 
+data_manager = DataManager()
+
+
 def create_app():
     """Application factory for the Telegram alert service."""
     base_dir = os.path.abspath(os.path.dirname(__file__))
@@ -25,7 +28,6 @@ def create_app():
     os.makedirs(db_dir, exist_ok=True)
     app.config['DB_DIR'] = db_dir
 
-    data_manager = DataManager()
     data_manager.start()
 
     @app.route('/api/alerts/generate', methods=['POST'])
