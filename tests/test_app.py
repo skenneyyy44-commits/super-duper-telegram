@@ -13,17 +13,12 @@ def test_healthz():
     assert resp.get_json() == {"ok": True}
 
 
-def test_static_index_served(tmp_path):
+def test_map_view_served():
     flask_app = create_app()
-    static_folder = flask_app.static_folder
-    os.makedirs(static_folder, exist_ok=True)
-    index_path = os.path.join(static_folder, 'index.html')
-    with open(index_path, 'w', encoding='utf-8') as f:
-        f.write('ok')
     client = flask_app.test_client()
     resp = client.get('/')
     assert resp.status_code == 200
-    os.remove(index_path)
+    assert b"folium" in resp.data
 
 
 def test_db_dir_exists():
