@@ -1,5 +1,6 @@
 import os
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify
+from earthquake_map import plot_quakes
 
 
 class DataManager:
@@ -37,19 +38,10 @@ def create_app():
     def health():
         return jsonify({"ok": True}), 200
 
-    @app.route('/', defaults={'path': ''})
-    @app.route('/<path:path>')
-    def serve(path):
-        static_folder = app.static_folder
-        if not static_folder or not os.path.isdir(static_folder):
-            return "Static folder not configured", 404
-        requested = os.path.join(static_folder, path)
-        if path and os.path.exists(requested):
-            return send_from_directory(static_folder, path)
-        index_path = os.path.join(static_folder, 'index.html')
-        if os.path.exists(index_path):
-            return send_from_directory(static_folder, 'index.html')
-        return "index.html not found", 404
+    @app.route('/')
+    def map_view():
+        """Display the earthquake map."""
+        return plot_quakes()
 
     @app.teardown_appcontext
     def cleanup(exception=None):
