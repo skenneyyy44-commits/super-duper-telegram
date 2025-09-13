@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Living Vistas — Generative Landscapes (p5.js)</title>
+  <style>
+    :root{--ui-bg:rgba(20,20,28,0.7);--ui-text:#f0f3f7;--ui-accent:#70e1ff;--ui-muted:#a6b0bf}
+    html,body{margin:0;height:100%;background:#0b1020;color:#e8eef6;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif}
+    #ui{position:fixed;inset:auto 12px 12px 12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--ui-bg);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.08);padding:10px 12px;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+    #ui label{font-size:12px;color:var(--ui-muted)}
+    #ui input[type="range"]{width:220px;accent-color:var(--ui-accent)}
+    #ui .btn{appearance:none;border:none;border-radius:12px;padding:8px 12px;background:#182036;color:var(--ui-text);cursor:pointer}
+    #ui .btn:hover{background:#1f2a49}
+    #ui .pill{padding:6px 10px;border-radius:999px;background:#131a2e;border:1px solid rgba(255,255,255,0.06)}
+    .spacer{flex:1 1 auto}
+    .hint{font-size:11px;color:var(--ui-muted)}
+    a {color:#9ad0ff;text-decoration:none}
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.3/p5.min.js" integrity="sha512-3Bv9k6X7r9eM3Y2Q3+6XdwK9Qw9d4n9JmU0q6E7i1M3o2+q7q6i6u7JvYwVxK2x0Hn6A0Q1hL0sUQy1bZ8V5OA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+<body>
+  <main id="app"></main>
+  <section id="ui">
+    <label>Time&nbsp;of&nbsp;Day</label>
+    <input id="timeSlider" type="range" min="0" max="1" step="0.001" value="0" />
+    <label>Stars</label>
+    <input id="starSlider" type="range" min="0" max="500" step="1" value="220" />
+    <button id="playBtn" class="btn">▶︎ Auto</button>
+    <span class="pill hint">Move mouse = wind • Click land = plant</span>
+    <div class="spacer"></div>
+    <button id="clearBtn" class="btn">Clear plants</button>
+    <button id="saveBtn" class="btn">Save PNG</button>
+  </section>
+
+<script>
+(() => {
+  // -------- CONFIG --------
+  const PAL = {
+    sunrise: ['#F2D0A9', '#D9A48B', '#A67B7B', '#735757'],
+    day:     ['#87CEEB', '#FFFFFF', '#A9D6E5', '#4682B4'],
+    sunset:  ['#FFB347', '#FF6F61', '#9370DB', '#483D8B'],
+    night:   ['#000033', '#191970', '#E6E6FA', '#FFFFFF']
+  };
+
+  const LAYERS = [
+    { amp: 90,  base: 0.55, speed: 0.00015, detail: 0.0035, colIdx: 3, alpha: 220 }, // back
+    { amp: 120, base: 0.70, speed: 0.00022, detail: 0.0045, colIdx: 2, alpha: 235 }, // mid
+    { amp: 150, base: 0.82, speed: 0.00030, detail: 0.0060, colIdx: 1, alpha: 255 }  // front (ground)
+  ];
+
+  let starCount = 220;
+
+  // -------- STATE --------
+  let t = 0;                // normalized time-of-day [0..1)
+  let animateTime = true;   // auto-cycle
+  let plants = [];          // user planted objects
+  let stars = [];
+
+  // UI elements
+  const timeSlider = document.getElementById('timeSlider');
+  const starSlider = document.getElementById('starSlider');
+  const playBtn = document.getElementById('playBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const saveBtn = document.getElementById('saveBtn');
+
+  playBtn.onclick = () => {
+    animateTime = !animateTime;
+    playBtn.textContent = animateTime ? '▶︎ Auto' : '❚❚ Manual';
+  };
+  clearBtn.onclick = () => { plants = []; };
+  saveBtn.onclick = () => { saveCanvas('living-vistas', 'png'); };
+  timeSlider.oninput = e => { t = parseFloat(e.target.value); animateTime = false; playBtn.textContent = '❚❚ Manual'; };
+  starSlider.oninput = e => { starCount = parseInt(e.target.value, 10); initStars(); };
+
+  function lerpColorHex(a, b, p) {
+    const ah = +('0x' + a.slice(1));
+    const bh = +('0x' + b.slice(1));
+    const r = (ah >> 16) + ((bh >> 16) - (ah >> 16)) * p;
+    const g = ((ah >> 8) & 0xff) + (((bh >> 8) & 0xff) - ((ah >> 8) & 0xff)) * p;
+    const bl = (ah & 0xff) + ((bh & 0xff) - (ah & 0xff)) * p;
+    return color(r, g, bl);
+  }
+
+  function phaseToPalette(phase) {
+    // 0.00-0.25 sunrise -> day; 0.25-0.5 day -> sunset; 0.5-0.75 sunset -> night; 0.75-1 night -> sunrise
+    const seg = phase * 4.0;
+    if (seg < 1) return ['sunrise','day', seg];
+    if (seg < 2) return ['day','sunset', seg-1];
+    if (seg < 3) return ['sunset','night', seg-2];
+    return ['night','sunrise', seg-3];
+  }
+
+  function skyColors(phase) {
+    const [fromKey, toKey, p] = phaseToPalette(phase);
+    const A = PAL[fromKey], B = PAL[toKey];
+    return [
+      lerpColorHex(A[0], B[0], p),
+      lerpColorHex(A[1], B[1], p),
+      lerpColorHex(A[2], B[2], p),
+      lerpColorHex(A[3], B[3], p)
+    ];
+  }
+
+  function drawVerticalGradient(cTop, cBottom) {
+    noStroke();
+    for (let y = 0; y < height; y++) {
+      const p = y / (height - 1);
+      const c = lerpColor(cTop, cBottom, p);
+      fill(c);
+      rect(0, y, width, 1);
+    }
+  }
+
+  function initStars() {
+    stars = new Array(starCount).fill(0).map(() => ({
+      x: random(width),
+      y: random(height * 0.6),
+      r: random(0.5, 1.8),
+      tw: random(1000, 4000),
+      seed: random(1000)
+    }));
+  }
+
+  function drawStars(phase) {
+    // Visible at night (phase ~ 0.5..1.0). Fade in/out around dusk/dawn.
+    let nightAmt = 0;
+    const seg = phase * 4.0;
+    if (seg < 1) nightAmt = 1 - seg;        // sunrise -> day fade out
+    else if (seg < 2) nightAmt = 0;         // day
+    else if (seg < 3) nightAmt = seg - 2;   // sunset -> night fade in
+    else nightAmt = 1;                      // night
+
+    push();
+    noStroke();
+    for (const s of stars) {
+      const twinkle = 0.6 + 0.4 * noise((millis() + s.seed) / s.tw);
+      const a = 180 * nightAmt * twinkle;
+      fill(255, 255, 255, a);
+      circle(s.x, s.y, s.r * 2);
+    }
+    pop();
+  }
+
+  function drawSunMoon(phase) {
+    // Sun visible 0..0.5, moon 0.5..1
+    const angle = map(phase, 0, 1, -PI, PI); // -PI (sunrise) -> PI
+    const skyR = min(width, height) * 0.45;
+    const cx = width * 0.5, cy = height * 0.95;
+    const sx = cx + skyR * cos(angle);
+    const sy = cy - skyR * sin(angle);
+
+    noStroke();
+    if (phase < 0.5) {
+      // Sun
+      fill(255, 240, 180, 230);
+      circle(sx, sy, 36);
+      // Soft glow
+      for (let i=0;i<4;i++){
+        fill(255, 240, 180, 60-(i*12));
+        circle(sx, sy, 80 + i*60);
+      }
+    } else {
+      // Moon
+      fill(240, 244, 255, 230);
+      circle(sx, sy, 26);
+      fill(0, 0, 0, 60);
+      circle(sx-6, sy-3, 24);
+    }
+  }
+
+  function terrainY(x, layerIdx, phase, wind) {
+    const L = LAYERS[layerIdx];
+    const tShift = (millis() * L.speed) + phase * 1000.0; // phase shift keeps look stable across slider
+    const nx = x * L.detail + wind * 0.02; // wind subtly shifts sample
+    const n = noise(nx, tShift);
+    const base = height * L.base;
+    return base - n * L.amp;
+  }
+
+  function drawLayer(layerIdx, cols) {
+    const L = LAYERS[layerIdx];
+    const c = color(cols[L.colIdx]);
+    c.setAlpha(L.alpha);
+    fill(c);
+    noStroke();
+    beginShape();
+    vertex(0, height);
+    const wind = map(mouseX || width/2, 0, width, -1, 1);
+    for (let x = 0; x <= width; x += 3) {
+      const y = terrainY(x, layerIdx, t, wind);
+      vertex(x, y);
+    }
+    vertex(width, height);
+    endShape(CLOSE);
+  }
+
+  function groundHeightAt(x) {
+    // Ground is the front layer (index 2)
+    const wind = map(mouseX || width/2, 0, width, -1, 1);
+    return terrainY(x, 2, t, wind);
+  }
+
+  // ---- Flora ----
+  function plantAt(x) {
+    const gy = groundHeightAt(x);
+    const kind = random() < 0.5 ? 'flower' : 'tree';
+    plants.push({ x, y: gy, kind, seed: random(10000), size: random(0.8,1.2) });
+  }
+
+  function drawPlants(cols) {
+    const wind = map(mouseX || width/2, 0, width, -1, 1);
+    for (const p of plants) {
+      push();
+      translate(p.x, p.y);
+      const sway = wind * 0.25 + 0.1 * sin((millis()+p.seed)/1200);
+      scale(p.size);
+      if (p.kind === 'tree') drawTree(sway, cols);
+      else drawFlower(sway, cols);
+      pop();
+    }
+  }
+
+  function drawTree(sway, cols) {
+    noStroke();
+    // trunk
+    push();
+    rotate(sway * 0.2);
+    fill(90, 70, 55);
+    rect(-3, 0, 6, -36, 3);
+    pop();
+    // canopy
+    const leafC = color(cols[1]); leafC.setAlpha(230);
+    fill(leafC);
+    const r = 20;
+    circle(0, -40, r*1.2);
+    circle(-10, -34, r);
+    circle(10, -34, r);
+  }
+
+  function drawFlower(sway, cols) {
+    noStroke();
+    // stem
+    push();
+    rotate(sway * 0.25);
+    fill(60, 130, 80);
+    rect(-1.2, 0, 2.4, -22, 2);
+    // leaf
+    ellipse(4, -10, 10, 4);
+    pop();
+    // petals
+    const petal = color(cols[2]); petal.setAlpha(240);
+    fill(petal);
+    for (let i=0;i<6;i++){
+      const ang = (TWO_PI/6)*i + sway*0.3;
+      const px = cos(ang)*6, py = -24 + sin(ang)*6;
+      ellipse(px, py, 8, 12);
+    }
+    // center
+    fill(255, 220, 120);
+    circle(0, -24, 6);
+  }
+
+  // ---- p5 SKETCH ----
+  window.setup = function(){
+    const c = createCanvas(window.innerWidth, window.innerHeight);
+    c.parent('app');
+    noiseDetail(4, 0.5);
+    initStars();
+    starSlider.value = starCount;
+  };
+
+  window.windowResized = function(){
+    resizeCanvas(window.innerWidth, window.innerHeight);
+    initStars();
+  };
+
+  window.mousePressed = function(){
+    // Only plant if clicking on land (below sky & near ground)
+    if (mouseY > 0 && mouseY < height) {
+      const gy = groundHeightAt(mouseX);
+      if (mouseY >= gy - 16 && mouseY <= gy + 50) {
+        plantAt(mouseX);
+      }
+    }
+  };
+
+  window.draw = function(){
+    if (animateTime) {
+      // Very slow day-night cycle (~ 90 seconds per full loop)
+      t = (t + 1/ (60*90)) % 1;
+      timeSlider.value = t.toFixed(3);
+    }
+
+    // Sky
+    const cols = skyColors(t);
+    drawVerticalGradient(cols[0], cols[1]);
+
+    // Stars + Sun/Moon
+    drawStars(t);
+    drawSunMoon(t);
+
+    // Terrain layers (back to front) with palette blending
+    drawLayer(0, cols);
+    drawLayer(1, cols);
+    drawLayer(2, cols);
+
+    // Plants last so they sit on foreground
+    drawPlants(cols);
+
+    // Subtle vignette
+    push(); noFill(); stroke(0,0,0,30); strokeWeight(80); rect(40,40,width-80,height-80,60); pop();
+  };
+})();
+</script>
+</body>
+</html>
