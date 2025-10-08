@@ -87,16 +87,28 @@ except ModuleNotFoundError:  # pragma: no cover - exercised indirectly in tests
             return func
 
         def _dispatch_request(self, method: str, path: str, data: Any = None) -> SimpleResponse:
-            for rule, methods, defaults, func in self._routes:  # type: ignore[attr-defined]
-                if method not in methods:
-                    continue
-                match = self._match(rule, path)
-                if match is None:
-                    continue
-                kwargs = {**defaults, **match}
-                result = func(**kwargs) if kwargs else func()
-                return self._make_response(result)
-            return SimpleResponse("Not Found", status=404)
+            exception: Optional[BaseException] = None
+            try:
+                for rule, methods, defaults, func in self._routes:  # type: ignore[attr-defined]
+                    if method not in methods:
+                        continue
+                    match = self._match(rule, path)
+                    if match is None:
+                        continue
+                    kwargs = {**defaults, **match}
+                    try:
+                        result = func(**kwargs) if kwargs else func()
+                    except BaseException as exc:  # pragma: no cover - handled via finally
+                        exception = exc
+                        raise
+                    return self._make_response(result)
+                return SimpleResponse("Not Found", status=404)
+            except BaseException as exc:
+                exception = exc
+                raise
+            finally:
+                for teardown in reversed(self._teardowns):
+                    teardown(exception)
 
         @staticmethod
         def _match(rule: str, path: str) -> Optional[Dict[str, Any]]:

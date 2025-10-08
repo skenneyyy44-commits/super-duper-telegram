@@ -2,7 +2,9 @@ import os
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from app import create_app
+import app as app_module
+
+create_app = app_module.create_app
 
 
 def test_healthz():
@@ -29,3 +31,27 @@ def test_static_index_served(tmp_path):
 def test_db_dir_exists():
     flask_app = create_app()
     assert os.path.isdir(flask_app.config['DB_DIR'])
+
+
+def test_data_manager_stops_after_request_using_fallback(monkeypatch):
+    monkeypatch.setattr(app_module, "Flask", app_module.MiniFlask)
+
+    tracked: list[app_module.DataManager] = []
+    OriginalDataManager = app_module.DataManager
+
+    class TrackingDataManager(OriginalDataManager):
+        def __init__(self):
+            super().__init__()
+            tracked.append(self)
+
+    monkeypatch.setattr(app_module, "DataManager", TrackingDataManager)
+
+    flask_app = create_app()
+    assert tracked, "DataManager instance should be created"
+    data_manager = tracked[0]
+    assert data_manager.started is True
+
+    client = flask_app.test_client()
+    resp = client.get('/healthz')
+    assert resp.status_code == 200
+    assert data_manager.started is False
