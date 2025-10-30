@@ -1,0 +1,30 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: radial-gradient(circle at top, rgba(3, 9, 22, 0.9), #010409 60%);
+  color: #e2e8f0;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 1.5rem;
+  padding: 0 2rem 3rem;
+  width: min(1200px, 100%);
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+@media (max-width: 960px) {
+  .layout {
+    grid-template-columns: 1fr;
+    padding: 0 1.25rem 2.5rem;
+  }
+}
