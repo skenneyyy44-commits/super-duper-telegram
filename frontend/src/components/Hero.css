@@ -1,0 +1,32 @@
+.hero {
+  padding: 3.5rem 2rem 2rem;
+  background: linear-gradient(135deg, rgba(15, 76, 129, 0.6), rgba(145, 32, 109, 0.45));
+  border-bottom: 1px solid rgba(226, 232, 240, 0.1);
+  box-shadow: inset 0 -1px 0 rgba(15, 23, 42, 0.35);
+}
+
+.hero__content {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.hero__eyebrow {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #93c5fd;
+  margin: 0;
+}
+
+.hero__title {
+  margin: 0.5rem 0;
+  font-size: clamp(2.5rem, 5vw, 3.5rem);
+  letter-spacing: -0.03em;
+}
+
+.hero__copy {
+  margin: 0;
+  max-width: 60ch;
+  color: rgba(226, 232, 240, 0.85);
+  font-size: 1.05rem;
+}
