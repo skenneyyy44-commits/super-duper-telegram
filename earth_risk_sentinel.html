@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Earth Risk Sentinel – Multi-Region Seismic Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-VzLJI8vY5G9C4zjDqgW8sELxAoCYwLPLpXsk1M5pC2I="
+    crossorigin=""
+  />
+  <style>
+    :root {
+      --bg: #03040c;
+      --bg-elevated: #0c111f;
+      --bg-elevated-soft: #12182c;
+      --border-subtle: rgba(148, 163, 184, 0.22);
+      --accent: #7ae7ff;
+      --accent-strong: #46c5ff;
+      --accent-warn: #ffb347;
+      --accent-danger: #ff5f7e;
+      --text-main: #f7f9ff;
+      --text-dim: #a4adcc;
+      --text-soft: #7981a7;
+      --good: #4ade80;
+      --warn: #facc15;
+      --bad: #f97373;
+      --shadow-soft: 0 28px 65px rgba(0, 0, 0, 0.65);
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --radius-pill: 999px;
+      --transition-fast: 200ms ease;
+      --card-gap: 1.25rem;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: "Inter", "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      background: radial-gradient(circle at 15% 15%, rgba(83, 88, 214, 0.38), transparent 45%),
+        radial-gradient(circle at 90% 20%, rgba(67, 219, 255, 0.24), transparent 55%),
+        linear-gradient(135deg, #02040d, #040416 55%, #01020b);
+      color: var(--text-main);
+      padding: 1.5rem;
+    }
+
+    .app-shell {
+      width: min(1200px, 100%);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: flex-start;
+    }
+
+    .title-block {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .logo-orb {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      position: relative;
+      background: conic-gradient(from 220deg, #7ae7ff, #46c5ff, #52f7b4, #f7d660, #ff5f7e, #7ae7ff);
+      box-shadow: 0 0 30px rgba(122, 231, 255, 0.75);
+    }
+
+    .logo-orb::after {
+      content: "";
+      position: absolute;
+      inset: 8px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.85), rgba(0, 0, 0, 0.35));
+      border: 2px solid rgba(2, 6, 23, 0.5);
+    }
+
+    h1 {
+      font-size: clamp(1.2rem, 2vw, 1.55rem);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .subtitle {
+      font-size: 0.82rem;
+      color: var(--text-soft);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.4rem 0.9rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-subtle);
+      background: rgba(13, 20, 40, 0.75);
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+    }
+
+    .pill-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: #4ade80;
+      box-shadow: 0 0 12px rgba(74, 222, 128, 0.95);
+    }
+
+    .mode-switch {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.5rem;
+    }
+
+    .mode-btn {
+      border-radius: var(--radius-pill);
+      padding: 0.3rem 0.8rem;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(10, 14, 26, 0.7);
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      color: var(--text-soft);
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+
+    .mode-btn.active {
+      color: white;
+      border-color: var(--accent);
+      background: radial-gradient(circle at 10% 10%, rgba(122, 231, 255, 0.25), rgba(3, 4, 12, 0.95));
+      box-shadow: 0 0 20px rgba(122, 231, 255, 0.4);
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(0, 2.6fr);
+      gap: var(--card-gap);
+    }
+
+    .column {
+      display: flex;
+      flex-direction: column;
+      gap: var(--card-gap);
+    }
+
+    .card {
+      background: linear-gradient(145deg, rgba(23, 30, 52, 0.97), rgba(7, 9, 19, 0.9));
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      box-shadow: var(--shadow-soft);
+      padding: 1.2rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: -40% 35% auto -40%;
+      height: 60%;
+      background: radial-gradient(circle, rgba(72, 216, 255, 0.18), transparent 65%);
+      pointer-events: none;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.95rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .card-title {
+      font-size: 0.92rem;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .card-kicker {
+      font-size: 0.75rem;
+      color: var(--text-soft);
+    }
+
+    .card-body {
+      position: relative;
+      z-index: 1;
+    }
+
+    .pulse-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .pulse-stat {
+      min-width: 120px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+
+    .pulse-label {
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      font-size: 0.68rem;
+      color: var(--text-soft);
+    }
+
+    .pulse-value {
+      font-size: 1.5rem;
+      font-weight: 650;
+    }
+
+    .pulse-sub {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+    }
+
+    .gauge-wrapper {
+      width: clamp(200px, 30vw, 250px);
+    }
+
+    .gauge-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      color: var(--text-soft);
+      margin-bottom: 0.25rem;
+    }
+
+    .gauge-track {
+      height: 12px;
+      border-radius: var(--radius-pill);
+      background: linear-gradient(90deg, rgba(74, 222, 128, 0.25), rgba(250, 204, 21, 0.35), rgba(249, 115, 115, 0.45));
+      position: relative;
+      overflow: hidden;
+    }
+
+    .gauge-thumb {
+      position: absolute;
+      top: -5px;
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: #020611;
+      border: 2px solid var(--accent-strong);
+      box-shadow: 0 0 18px rgba(122, 231, 255, 0.9);
+      transform: translateX(-50%);
+      transition: left var(--transition-fast);
+    }
+
+    .note {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      line-height: 1.55;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .event-chip {
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      padding: 0.35rem 0.7rem;
+      font-size: 0.76rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      background: rgba(5, 9, 21, 0.75);
+    }
+
+    .event-mag {
+      border-radius: var(--radius-pill);
+      padding: 0.05rem 0.45rem;
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+
+    .mag-medium {
+      background: rgba(250, 204, 21, 0.18);
+      color: var(--warn);
+    }
+
+    .mag-strong {
+      background: rgba(249, 115, 115, 0.2);
+      color: var(--bad);
+    }
+
+    .event-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.7rem;
+    }
+
+    .event-label {
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.68rem;
+      color: var(--text-soft);
+    }
+
+    .event-meta {
+      margin-top: 0.2rem;
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+
+    .analytics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.8rem;
+      margin-top: 1rem;
+    }
+
+    .metric-card {
+      padding: 0.9rem;
+      border-radius: var(--radius-md);
+      background: rgba(9, 13, 28, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .metric-label {
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.65rem;
+      color: var(--text-soft);
+    }
+
+    .metric-value {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-top: 0.2rem;
+    }
+
+    .energy-gauge {
+      margin-top: 0.6rem;
+      height: 12px;
+      border-radius: var(--radius-pill);
+      background: rgba(122, 231, 255, 0.15);
+      position: relative;
+    }
+
+    .energy-gauge-fill {
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #34d399, #fbbf24, #f87171);
+      width: 10%;
+      transition: width 300ms ease;
+    }
+
+    .sparkline {
+      width: 100%;
+      height: 80px;
+      margin-top: 0.6rem;
+    }
+
+    .depth-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-top: 0.6rem;
+    }
+
+    .depth-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.74rem;
+    }
+
+    .depth-bar-track {
+      flex: 1;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-pill);
+      overflow: hidden;
+    }
+
+    .depth-bar-fill {
+      height: 100%;
+      border-radius: inherit;
+      width: 0%;
+      transition: width 300ms ease;
+    }
+
+    .sparkline path {
+      stroke: url(#sparkGradient);
+      stroke-width: 2;
+      fill: none;
+    }
+
+    .sparkline circle {
+      fill: rgba(122, 231, 255, 0.85);
+      stroke: rgba(14, 165, 233, 0.45);
+      stroke-width: 1;
+    }
+
+    .region-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.7rem;
+    }
+
+    .region-badge {
+      border-radius: var(--radius-md);
+      padding: 0.7rem;
+      background: var(--bg-elevated-soft);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      font-size: 0.78rem;
+      min-height: 90px;
+    }
+
+    .region-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+    }
+
+    .region-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    }
+
+    .status-quiet { background: var(--good); }
+    .status-normal { background: var(--warn); }
+    .status-elevated { background: var(--bad); }
+
+    .region-status { font-size: 0.7rem; color: var(--text-soft); }
+    .region-metric { color: var(--text-dim); font-size: 0.72rem; }
+
+    #map {
+      height: 220px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      overflow: hidden;
+    }
+
+    .footnote {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      font-size: 0.72rem;
+      color: var(--text-soft);
+      margin-top: 0.5rem;
+    }
+
+    .legend {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.7rem;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      gap: 0.35rem;
+      align-items: center;
+    }
+
+    .legend-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+
+    .swatch-quiet { background: var(--good); }
+    .swatch-normal { background: var(--warn); }
+    .swatch-elevated { background: var(--bad); }
+
+    @media (max-width: 880px) {
+      main { grid-template-columns: minmax(0, 1fr); }
+      body { padding: 1rem; }
+    }
+
+    @media (max-width: 600px) {
+      .pulse-row { flex-direction: column; align-items: flex-start; }
+      .gauge-wrapper { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header>
+      <div class="title-block">
+        <div class="logo-orb"></div>
+        <div>
+          <h1>Earth Risk Sentinel</h1>
+          <div class="subtitle" id="subtitle">Live 24-hour global seismic view</div>
+          <div class="mode-switch">
+            <button class="mode-btn active" data-mode="GLOBAL">Global</button>
+            <button class="mode-btn" data-mode="Japan & Kurils">Japan & Kurils</button>
+            <button class="mode-btn" data-mode="US West / Alaska">US West / Alaska</button>
+            <button class="mode-btn" data-mode="Mexico & Central America">Mexico & Central America</button>
+            <button class="mode-btn" data-mode="Caribbean / Puerto Rico">Caribbean / Puerto Rico</button>
+            <button class="mode-btn" data-mode="US East / Carolinas">US East / Carolinas</button>
+          </div>
+        </div>
+      </div>
+      <div class="pill">
+        <span class="pill-dot"></span>
+        LIVE • AUTO-REFRESHING
+      </div>
+    </header>
+
+    <main>
+      <section class="column">
+        <article class="card" id="global-card">
+          <div class="card-header">
+            <div>
+              <div class="card-title" id="pulse-title">Region Pulse</div>
+              <div class="card-kicker" id="pulse-kicker">Quake counts vs recent baseline</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="pulse-row">
+              <div class="pulse-stat">
+                <div class="pulse-label" id="stat-label-today">Quakes • 24h</div>
+                <div class="pulse-value" id="stat-today">—</div>
+                <div class="pulse-sub" id="stat-today-note">Fetching…</div>
+              </div>
+              <div class="pulse-stat">
+                <div class="pulse-label" id="stat-label-week">Quakes • 7d</div>
+                <div class="pulse-value" id="stat-week">—</div>
+                <div class="pulse-sub" id="stat-week-note">Fetching…</div>
+              </div>
+              <div class="gauge-wrapper">
+                <div class="gauge-labels">
+                  <span>Low</span>
+                  <span>Normal</span>
+                  <span>High</span>
+                </div>
+                <div class="gauge-track">
+                  <div class="gauge-thumb" id="gauge-thumb" style="left: 50%;"></div>
+                </div>
+              </div>
+            </div>
+            <div class="note" id="global-note">
+              Loading current seismic activity…
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Strongest Shocks (24h)</div>
+              <div class="card-kicker" id="top-kicker">Largest USGS-listed events in current view</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="chip-row" id="top-events-chips"></div>
+            <div class="event-row">
+              <div>
+                <div class="event-label">Depth signature</div>
+                <div class="event-meta" id="depth-profile">—</div>
+              </div>
+              <div>
+                <div class="event-label">Tsunami / escalation status</div>
+                <div class="event-meta" id="tsunami-status">—</div>
+              </div>
+            </div>
+            <div class="analytics-grid">
+              <div class="metric-card">
+                <div class="metric-label">Mean magnitude</div>
+                <div class="metric-value" id="mean-mag">—</div>
+                <div class="metric-label" style="margin-top:0.5rem">Energy release index</div>
+                <div class="metric-value text-sm" id="energy-index">—</div>
+                <div class="energy-gauge"><div class="energy-gauge-fill" id="energy-gauge-fill"></div></div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">3-hour cadence</div>
+                <svg class="sparkline" id="timeline-spark" viewBox="0 0 220 80" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="sparkGradient" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stop-color="#34d399" />
+                      <stop offset="50%" stop-color="#fbbf24" />
+                      <stop offset="100%" stop-color="#f87171" />
+                    </linearGradient>
+                  </defs>
+                  <path d="" id="spark-path" />
+                  <circle r="3" cx="0" cy="0" id="spark-head" style="opacity:0" />
+                </svg>
+                <div class="note" id="timeline-note">Awaiting timeline…</div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Depth Distribution</div>
+              <div class="card-kicker">Relative share of shallow / intermediate / deep events</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="depth-bars">
+              <div class="depth-bar">
+                <span>Shallow (≤70 km)</span>
+                <div class="depth-bar-track"><div class="depth-bar-fill" id="depth-shallow"></div></div>
+                <span id="depth-shallow-label">—</span>
+              </div>
+              <div class="depth-bar">
+                <span>Intermediate (70–300 km)</span>
+                <div class="depth-bar-track"><div class="depth-bar-fill" id="depth-intermediate"></div></div>
+                <span id="depth-intermediate-label">—</span>
+              </div>
+              <div class="depth-bar">
+                <span>Deep (≥300 km)</span>
+                <div class="depth-bar-track"><div class="depth-bar-fill" id="depth-deep"></div></div>
+                <span id="depth-deep-label">—</span>
+              </div>
+            </div>
+            <div class="note" id="depth-note">Awaiting depth analytics…</div>
+          </div>
+        </article>
+      </section>
+
+      <section class="column">
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Regional Activity Dials</div>
+              <div class="card-kicker">Global belts + US East / Carolinas watch</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="region-list" id="region-list"></div>
+            <div class="footnote">
+              <div class="legend">
+                <div class="legend-item"><span class="legend-swatch swatch-quiet"></span>Quiet</div>
+                <div class="legend-item"><span class="legend-swatch swatch-normal"></span>Normal</div>
+                <div class="legend-item"><span class="legend-swatch swatch-elevated"></span>Elevated</div>
+              </div>
+              <span>Last refresh: <span id="refresh-time">—</span></span>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">24h Epicenter Map</div>
+              <div class="card-kicker">Leaflet + USGS GeoJSON (all_day feed)</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="map"></div>
+            <div class="note">Circle size ~ magnitude; color shifts from cool (older/smaller) to warm (newer/larger). Mode filter applies to this layer.</div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-o9N1j7kGStG7zH7gLrPppZ9F90Yh0uU8gFv5p3p3p3s="
+    crossorigin=""
+  ></script>
+  <script>
+    const USGS_DAY_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson';
+    const USGS_WEEK_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson';
+
+    let globalDayFeatures = [];
+    let globalWeekFeatures = [];
+    let activeMode = 'GLOBAL';
+    const timelineBuckets = 8; // 3-hour slices
+
+    const globalStats = {
+      todayCount: 0,
+      weekCount: 0,
+      activityPercent: 50,
+      todayNote: '—',
+      weekNote: '—',
+      qualitative: '—',
+      meanMagnitude: '—',
+      energyIndex: '—',
+      energyPercent: 0,
+      timeline: new Array(timelineBuckets).fill(0),
+      depthMix: { shallow: 0, intermediate: 0, deep: 0 }
+    };
+
+    let topEvents = [];
+    let regions = [];
+    let mapInstance = null;
+    let quakeLayer = null;
+
+    const regionBounds = [
+      { name: 'Japan & Kurils', lat: [20, 60], lon: [120, 170] },
+      { name: 'US West / Alaska', lat: [25, 72], lon: [-180, -100] },
+      { name: 'Mexico & Central America', lat: [0, 35], lon: [-120, -70] },
+      { name: 'Caribbean / Puerto Rico', lat: [0, 30], lon: [-90, -50] },
+      { name: 'US East / Carolinas', lat: [30, 40], lon: [-90, -70] }
+    ];
+
+    function classifyRegion(lat, lon) {
+      const match = regionBounds.find((region) => lat >= region.lat[0] && lat <= region.lat[1] && lon >= region.lon[0] && lon <= region.lon[1]);
+      return match ? match.name : 'Ring of Fire (global)';
+    }
+
+    function statusFromCount(count) {
+      if (count === 0) return 'quiet';
+      if (count > 20) return 'elevated';
+      return 'normal';
+    }
+
+    function getModeFilteredFeatures(features) {
+      if (activeMode === 'GLOBAL') return features;
+      return features.filter((feature) => {
+        const [lon, lat] = feature.geometry.coordinates;
+        return classifyRegion(lat, lon) === activeMode;
+      });
+    }
+
+    function renderGlobalStats() {
+      document.getElementById('stat-today').textContent = globalStats.todayCount.toLocaleString();
+      document.getElementById('stat-week').textContent = globalStats.weekCount.toLocaleString();
+      document.getElementById('stat-today-note').textContent = globalStats.todayNote;
+      document.getElementById('stat-week-note').textContent = globalStats.weekNote;
+      document.getElementById('mean-mag').textContent = globalStats.meanMagnitude;
+      document.getElementById('energy-index').textContent = globalStats.energyIndex;
+      document.getElementById('energy-gauge-fill').style.width = `${globalStats.energyPercent}%`;
+
+      const gaugeThumb = document.getElementById('gauge-thumb');
+      gaugeThumb.style.left = `${Math.max(0, Math.min(100, globalStats.activityPercent))}%`;
+
+      const modeLabel = activeMode === 'GLOBAL' ? 'Global' : activeMode;
+      document.getElementById('subtitle').textContent = `Live 24-hour seismic view • ${modeLabel}`;
+      document.getElementById('pulse-title').textContent = `${modeLabel} Pulse`;
+      document.getElementById('pulse-kicker').textContent = activeMode === 'GLOBAL'
+        ? 'Quake counts vs recent global baseline'
+        : 'Belt vs global baseline';
+      document.getElementById('stat-label-today').textContent = activeMode === 'GLOBAL' ? 'Quakes • 24h' : 'Quakes • 24h (region)';
+      document.getElementById('stat-label-week').textContent = activeMode === 'GLOBAL' ? 'Quakes • 7d' : 'Quakes • 7d (global ref)';
+      document.getElementById('global-note').innerHTML = `${modeLabel} seismicity is tracking <strong>${globalStats.qualitative}</strong> for this rolling 24 h.`;
+    }
+
+    function renderTopEvents() {
+      const container = document.getElementById('top-events-chips');
+      container.innerHTML = '';
+      if (!topEvents.length) {
+        container.textContent = 'No events in this view for the last 24h.';
+        document.getElementById('depth-profile').textContent = '—';
+        document.getElementById('tsunami-status').textContent = '—';
+        return;
+      }
+
+      let shallowCount = 0;
+      let deepCount = 0;
+      let tsunamiFlagged = 0;
+
+      topEvents.forEach((event) => {
+        const chip = document.createElement('div');
+        chip.className = 'event-chip';
+        const magSpan = document.createElement('span');
+        magSpan.className = `event-mag ${event.mag >= 6 ? 'mag-strong' : 'mag-medium'}`;
+        magSpan.textContent = `M${event.mag.toFixed(1)}`;
+        const labelSpan = document.createElement('span');
+        labelSpan.textContent = event.region;
+        chip.appendChild(magSpan);
+        chip.appendChild(labelSpan);
+        chip.title = `${new Date(event.time).toLocaleString()} • depth ${event.depth} km • ${event.impact}`;
+        container.appendChild(chip);
+
+        if (event.depthValue <= 70) shallowCount++;
+        else deepCount++;
+        if (event.tsunami) tsunamiFlagged++;
+      });
+
+      document.getElementById('depth-profile').textContent = shallowCount >= deepCount
+        ? 'Dominantly shallow crustal ruptures with a few deeper subduction shocks.'
+        : 'Blend of intermediate / deep-focus quakes indicative of slab activity.';
+
+      document.getElementById('tsunami-status').textContent = tsunamiFlagged > 0
+        ? 'Some events carry USGS tsunami flags; watch regional bulletins.'
+        : 'No tsunami bulletins tied to the strongest events in this window.';
+    }
+
+    function renderRegions() {
+      const listEl = document.getElementById('region-list');
+      listEl.innerHTML = '';
+      regions.forEach((region) => {
+        const item = document.createElement('div');
+        item.className = 'region-badge';
+        const topRow = document.createElement('div');
+        topRow.className = 'region-top';
+        const name = document.createElement('div');
+        name.textContent = region.name;
+        const dot = document.createElement('div');
+        dot.className = `region-dot ${region.status === 'quiet' ? 'status-quiet' : region.status === 'elevated' ? 'status-elevated' : 'status-normal'}`;
+        topRow.appendChild(name);
+        topRow.appendChild(dot);
+        const status = document.createElement('div');
+        status.className = 'region-status';
+        status.textContent = region.statusLabel;
+        const metric = document.createElement('div');
+        metric.className = 'region-metric';
+        metric.textContent = region.metric;
+        item.appendChild(topRow);
+        item.appendChild(status);
+        item.appendChild(metric);
+        listEl.appendChild(item);
+      });
+
+      document.getElementById('refresh-time').textContent = new Date().toLocaleString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        month: 'short',
+        day: '2-digit'
+      });
+    }
+
+    function renderDepthAnalytics() {
+      const { shallow, intermediate, deep } = globalStats.depthMix;
+      const total = shallow + intermediate + deep || 1;
+      const shallowPct = Math.round((shallow / total) * 100);
+      const intermediatePct = Math.round((intermediate / total) * 100);
+      const deepPct = Math.round((deep / total) * 100);
+      document.getElementById('depth-shallow').style.width = `${shallowPct}%`;
+      document.getElementById('depth-intermediate').style.width = `${intermediatePct}%`;
+      document.getElementById('depth-deep').style.width = `${deepPct}%`;
+      document.getElementById('depth-shallow').style.background = 'linear-gradient(90deg, #34d399, #10b981)';
+      document.getElementById('depth-intermediate').style.background = 'linear-gradient(90deg, #fbbf24, #f97316)';
+      document.getElementById('depth-deep').style.background = 'linear-gradient(90deg, #f87171, #ef4444)';
+      document.getElementById('depth-shallow-label').textContent = `${shallowPct}%`;
+      document.getElementById('depth-intermediate-label').textContent = `${intermediatePct}%`;
+      document.getElementById('depth-deep-label').textContent = `${deepPct}%`;
+      document.getElementById('depth-note').textContent = 'Percentages derived from filtered 24 h set; deep share >30% often signals slab activation.';
+    }
+
+    function renderTimeline() {
+      const data = globalStats.timeline;
+      const maxVal = Math.max(...data, 1);
+      const width = 220;
+      const height = 80;
+      const step = width / (data.length - 1 || 1);
+      const points = data.map((value, index) => {
+        const x = index * step;
+        const y = height - (value / maxVal) * (height - 10) - 5;
+        return `${x},${y}`;
+      }).join(' ');
+      const path = document.getElementById('spark-path');
+      if (data.length > 1) {
+        const d = `M${points}`;
+        path.setAttribute('d', d);
+        const head = document.getElementById('spark-head');
+        const lastPoint = points.split(' ').pop().split(',');
+        head.setAttribute('cx', lastPoint[0]);
+        head.setAttribute('cy', lastPoint[1]);
+        head.style.opacity = 1;
+        document.getElementById('timeline-note').textContent = 'Each node = 3 h quake count (local time)';
+      } else {
+        path.removeAttribute('d');
+        document.getElementById('timeline-note').textContent = 'Insufficient data for cadence view.';
+      }
+    }
+
+    function initMap(features) {
+      const mapEl = document.getElementById('map');
+      if (!mapEl) return;
+      if (!mapInstance) {
+        mapInstance = L.map('map', { zoomControl: false }).setView([20, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 8,
+          attribution: '© OpenStreetMap contributors'
+        }).addTo(mapInstance);
+        quakeLayer = L.layerGroup().addTo(mapInstance);
+      }
+      quakeLayer.clearLayers();
+      const filtered = getModeFilteredFeatures(features);
+      filtered.forEach((feature) => {
+        const [lon, lat, depth] = feature.geometry.coordinates;
+        const mag = feature.properties.mag || 0;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+        const ageHours = (Date.now() - feature.properties.time) / 3_600_000;
+        const color = mag >= 6
+          ? '#ff4d6d'
+          : ageHours <= 6
+          ? '#f97316'
+          : '#60a5fa';
+        const radius = Math.max(4, mag * 2.4);
+        const circle = L.circleMarker([lat, lon], {
+          radius,
+          color,
+          weight: 1,
+          fillColor: color,
+          fillOpacity: 0.6
+        }).addTo(quakeLayer);
+        circle.bindPopup(`<strong>M${mag.toFixed(1)}</strong><br/>${feature.properties.place || '—'}<br/>Depth: ${depth?.toFixed?.(1) ?? '—'} km<br/>${new Date(feature.properties.time).toLocaleString()}`);
+      });
+
+      const viewSettings = {
+        'GLOBAL': { center: [20, 0], zoom: 2 },
+        'Japan & Kurils': { center: [35, 145], zoom: 4 },
+        'US West / Alaska': { center: [40, -135], zoom: 3 },
+        'Mexico & Central America': { center: [15, -95], zoom: 4 },
+        'Caribbean / Puerto Rico': { center: [18, -65], zoom: 5 },
+        'US East / Carolinas': { center: [34, -78], zoom: 5 }
+      };
+      const view = viewSettings[activeMode] || viewSettings.GLOBAL;
+      mapInstance.setView(view.center, view.zoom);
+    }
+
+    async function fetchGeoJSON(url) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`USGS fetch failed: ${response.status}`);
+      return response.json();
+    }
+
+    function computeEnergy(features) {
+      if (!features.length) return { score: 0, text: '—' };
+      const sum = features.reduce((acc, feature) => {
+        const mag = feature.properties.mag || 0;
+        if (mag <= 0) return acc;
+        return acc + Math.pow(10, 1.5 * mag);
+      }, 0);
+      const logEnergy = Math.log10(sum || 1);
+      const percent = Math.min(100, Math.max(5, (logEnergy / 12) * 100));
+      const label = logEnergy < 8 ? 'Background energy signature' : logEnergy < 9.5 ? 'Busy crustal release' : 'Strong energy discharge';
+      return { score: logEnergy.toFixed(2), label, percent };
+    }
+
+    function computeTimeline(features) {
+      const bucketHours = 24 / timelineBuckets;
+      const series = new Array(timelineBuckets).fill(0);
+      const now = Date.now();
+      features.forEach((feature) => {
+        const ageHours = (now - feature.properties.time) / 3_600_000;
+        const bucketIndex = Math.min(timelineBuckets - 1, Math.max(0, Math.floor(ageHours / bucketHours)));
+        series[timelineBuckets - 1 - bucketIndex]++;
+      });
+      return series;
+    }
+
+    function computeDepthMix(features) {
+      const mix = { shallow: 0, intermediate: 0, deep: 0 };
+      features.forEach((feature) => {
+        const depth = feature.geometry.coordinates[2] || 0;
+        if (depth <= 70) mix.shallow++;
+        else if (depth <= 300) mix.intermediate++;
+        else mix.deep++;
+      });
+      return mix;
+    }
+
+    function recomputeForMode() {
+      const filteredDay = getModeFilteredFeatures(globalDayFeatures);
+      globalStats.todayCount = activeMode === 'GLOBAL' ? globalDayFeatures.length : filteredDay.length;
+      globalStats.weekCount = globalWeekFeatures.length;
+      const base = activeMode === 'GLOBAL' ? 2000 : 200;
+      const percent = Math.min(100, (globalStats.todayCount / base) * 100);
+      globalStats.activityPercent = percent;
+      globalStats.qualitative = percent < 35 ? 'low–normal' : percent < 70 ? 'normal–busy' : 'elevated';
+      globalStats.todayNote = activeMode === 'GLOBAL' ? 'USGS all magnitudes • 24h feed' : 'USGS all magnitudes in this belt • 24h';
+      globalStats.weekNote = 'USGS all magnitudes • 7-day global feed';
+
+      const magnitudes = filteredDay.map((f) => f.properties.mag || 0).filter((mag) => mag > 0);
+      const meanMag = magnitudes.length ? (magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length).toFixed(1) : '—';
+      globalStats.meanMagnitude = meanMag;
+
+      const energy = computeEnergy(filteredDay.length ? filteredDay : globalDayFeatures);
+      globalStats.energyIndex = `${energy.label} (log₁₀E ${energy.score})`;
+      globalStats.energyPercent = energy.percent;
+
+      globalStats.timeline = computeTimeline(filteredDay);
+      globalStats.depthMix = computeDepthMix(filteredDay);
+
+      const sorted = [...filteredDay].sort((a, b) => (b.properties.mag || 0) - (a.properties.mag || 0));
+      topEvents = sorted.slice(0, 4).map((feature) => {
+        const mag = feature.properties.mag || 0;
+        const place = feature.properties.place || 'Unknown region';
+        const depth = feature.geometry.coordinates[2] || 0;
+        const tsunami = Boolean(feature.properties.tsunami);
+        return {
+          mag,
+          region: place,
+          depth: depth.toFixed(1),
+          depthValue: depth,
+          time: feature.properties.time,
+          impact: tsunami ? 'Tsunami-flagged by USGS' : 'No tsunami flag',
+          tsunami
+        };
+      });
+
+      const regionCounts = {
+        'Ring of Fire (global)': 0,
+        'Japan & Kurils': 0,
+        'US West / Alaska': 0,
+        'Mexico & Central America': 0,
+        'Caribbean / Puerto Rico': 0,
+        'US East / Carolinas': 0
+      };
+
+      globalDayFeatures.forEach((feature) => {
+        const [lon, lat] = feature.geometry.coordinates;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+        const region = classifyRegion(lat, lon);
+        regionCounts[region] = (regionCounts[region] || 0) + 1;
+      });
+
+      regions = Object.entries(regionCounts).map(([name, count]) => {
+        const status = statusFromCount(count);
+        return {
+          name,
+          status,
+          statusLabel: status === 'quiet' ? 'Quiet' : status === 'normal' ? 'Normal-active' : 'Elevated / clustered',
+          metric: count === 0 ? 'No quakes logged in 24h' : `${count} quake${count > 1 ? 's' : ''} in last 24h`
+        };
+      });
+
+      renderGlobalStats();
+      renderTopEvents();
+      renderRegions();
+      renderDepthAnalytics();
+      renderTimeline();
+      initMap(globalDayFeatures);
+    }
+
+    async function updateDashboard() {
+      try {
+        const [dayData, weekData] = await Promise.all([
+          fetchGeoJSON(USGS_DAY_URL),
+          fetchGeoJSON(USGS_WEEK_URL)
+        ]);
+        globalDayFeatures = dayData.features || [];
+        globalWeekFeatures = weekData.features || [];
+        recomputeForMode();
+      } catch (error) {
+        console.error(error);
+        document.getElementById('global-note').textContent = 'Error fetching live USGS data. Check your network or try again.';
+      }
+    }
+
+    function setupModeButtons() {
+      document.querySelectorAll('.mode-btn').forEach((button) => {
+        button.addEventListener('click', () => {
+          const mode = button.getAttribute('data-mode');
+          if (!mode || mode === activeMode) return;
+          activeMode = mode;
+          document.querySelectorAll('.mode-btn').forEach((btn) => btn.classList.remove('active'));
+          button.classList.add('active');
+          recomputeForMode();
+        });
+      });
+    }
+
+    window.addEventListener('load', () => {
+      setupModeButtons();
+      updateDashboard();
+      setInterval(updateDashboard, 10 * 60 * 1000);
+    });
+  </script>
+</body>
+</html>
