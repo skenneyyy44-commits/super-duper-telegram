@@ -3,1632 +3,904 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scientific Earthquake Simulator</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Postprocessing & examples (EffectComposer, Passes, UnrealBloom) -->
-    <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
-    <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
-    <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-    <script src="https://unpkg.com/three@0.128.0/examples/js/shaders/FXAAShader.js"></script>
-    <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <title>Seismic Architecture Lab</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #020617; }
-        #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
-        
-        /* Glassmorphism UI */
-        .glass-panel {
-            background: rgba(15, 23, 42, 0.75);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(56, 189, 248, 0.2);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        :root {
+            --bg-color: #050608;
+            --panel-bg: rgba(15, 20, 25, 0.9);
+            --text-main: #d0d0d0;
+            --accent: #00f0ff;
+            --warning: #ffcc00;
+            --danger: #ff3333;
         }
         
-        /* Scientific aesthetic for controls */
-        .tech-border {
-            border-left: 2px solid #38bdf8;
-        }
-        
-        .seismograph-line {
-            stroke-linecap: round;
-            stroke-linejoin: round;
-            filter: drop-shadow(0 0 2px currentColor);
-        }
-        
-        /* Custom Range Slider */
-        input[type="range"] {
-            -webkit-appearance: none;
-            background: rgba(30, 41, 59, 0.8);
-            border-radius: 2px;
-            height: 4px;
-            border: 1px solid rgba(56, 189, 248, 0.3);
-        }
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 12px;
-            height: 12px;
-            background: #38bdf8;
-            border: 1px solid #fff;
-            box-shadow: 0 0 10px #38bdf8;
-            border-radius: 50%;
-            cursor: pointer;
-            margin-top: -4px;
-        }
-        input[type="range"]::-webkit-slider-runnable-track {
-            height: 4px;
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: var(--bg-color); 
+            font-family: 'Roboto Mono', monospace; 
+            color: var(--text-main);
+            user-select: none;
         }
 
-        /* Animations */
-        @keyframes pulse-red {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-        }
-        .pulse-active { animation: pulse-red 2s infinite; }
-        
-        .glow-text { text-shadow: 0 0 10px currentColor; }
+        #canvas-container { width: 100vw; height: 100vh; }
 
-        /* Heat map gradient bar */
-        .heatmap-bar {
-            background: linear-gradient(to right, #1e40af, #0ea5e9, #10b981, #eab308, #f97316, #dc2626);
-            height: 20px;
-            border-radius: 4px;
-            position: relative;
-            box-shadow: 0 0 10px rgba(255, 183, 102, 0.3);
-            transition: box-shadow 0.3s ease;
-        }
-        .heatmap-bar.active-quake {
-            animation: heatmap-pulse 0.3s ease-in-out;
-            box-shadow: 0 0 20px rgba(255, 150, 50, 0.8), inset 0 0 15px rgba(255, 200, 100, 0.3);
-        }
-        .heatmap-label {
+        /* Scientific HUD */
+        #dashboard {
             position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 180px;
+            background: linear-gradient(to top, #000 0%, transparent 100%);
+            display: flex;
+            align-items: flex-end;
+            padding: 20px;
+            box-sizing: border-box;
+            pointer-events: none;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border-left: 2px solid var(--accent);
+            padding: 15px;
+            margin-right: 20px;
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+            border-radius: 0 4px 4px 0;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .data-readout {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 160px;
+        }
+
+        .label {
             font-size: 10px;
-            font-weight: bold;
-            top: -18px;
+            text-transform: uppercase;
+            color: #888;
+            letter-spacing: 1px;
+            font-weight: 600;
         }
 
-        /* Enhanced animations */
-        @keyframes glow-pulse {
-            0%, 100% { filter: drop-shadow(0 0 5px currentColor); }
-            50% { filter: drop-shadow(0 0 15px currentColor); }
+        .value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-main);
+            font-feature-settings: "tnum";
         }
-        @keyframes heatmap-pulse {
-            0% { transform: scaleY(1); }
-            50% { transform: scaleY(1.15); }
-            100% { transform: scaleY(1); }
-        }
-        .glow-pulse { animation: glow-pulse 1.5s ease-in-out infinite; }
 
-        /* Timeline slider */
-        .timeline-track {
-            background: rgba(30, 41, 59, 0.6);
-            border-radius: 4px;
-            height: 6px;
+        .value.alert { color: var(--danger); text-shadow: 0 0 10px rgba(255, 51, 51, 0.5); }
+        .value.warn { color: var(--warning); }
+
+        #seismograph-wrapper {
             position: relative;
+            width: 400px;
+            height: 100px;
+            background: #020202;
+            border: 1px solid #333;
         }
-        .timeline-progress {
-            background: linear-gradient(to right, #3b82f6, #ec4899);
+
+        canvas#seismograph {
+            display: block;
+            width: 100%;
             height: 100%;
-            border-radius: 4px;
-            transition: width 0.1s linear;
         }
+        
+        #overlay-grid {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: 
+                linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            pointer-events: none;
+        }
+
+        #status-bar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            gap: 20px;
+            pointer-events: none;
+        }
+
+        .status-item {
+            background: rgba(10,10,10,0.8);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid rgba(255,255,255,0.15);
+            backdrop-filter: blur(4px);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        .legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(10,10,10,0.8);
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.15);
+            text-align: right;
+            backdrop-filter: blur(4px);
+            pointer-events: none;
+        }
+        .legend-item {
+            font-size: 11px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+        .color-box { width: 12px; height: 12px; border-radius: 2px; }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #444;
+        }
+        .dot.active { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+        .dot.warning { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
+        .instruction-toast {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 240, 255, 0.1);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 8px 16px;
+            font-size: 12px;
+            border-radius: 20px;
+            pointer-events: none;
+            opacity: 0.8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
     </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+                "cannon-es": "https://esm.sh/cannon-es@0.20.0",
+                "tweakpane": "https://esm.sh/tweakpane@4.0.3"
+            }
+        }
+    </script>
 </head>
-<body class="text-slate-200 antialiased selection:bg-cyan-500/30">
+<body>
     <div id="canvas-container"></div>
     
-    <!-- Header -->
-    <div class="fixed top-0 left-0 right-0 z-10 p-4 pointer-events-none">
-        <div class="glass-panel rounded-lg p-3 max-w-7xl mx-auto pointer-events-auto flex items-center justify-between">
-            <div class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded bg-gradient-to-br from-cyan-900 to-blue-900 flex items-center justify-center border border-cyan-500/30">
-                    <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
-                    </svg>
-                </div>
-                <div>
-                    <h1 class="text-lg font-bold text-cyan-50 tracking-wide uppercase">Seismic Laboratory <span class="text-cyan-500 text-xs align-top">v3.0</span></h1>
-                    <div class="flex gap-4 text-xs font-mono text-cyan-400/70">
-                        <span id="fps-counter">60 FPS</span>
-                        <span>GRID: 1km</span>
-                        <span id="sim-status">STANDBY</span>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="text-right hidden sm:block">
-                <div id="current-time" class="text-lg font-mono font-bold text-slate-100">00:00:00</div>
-                <div class="text-xs text-cyan-400/50 uppercase tracking-widest">UTC Coordinated</div>
-            </div>
+    <div class="instruction-toast">Shift + Click to Set Epicenter</div>
+
+    <!-- Top Status Bar -->
+    <div id="status-bar">
+        <div class="status-item">
+            <div class="dot active" id="sim-status"></div>
+            SIMULATION ONLINE
+        </div>
+        <div class="status-item">
+            <div class="dot" id="quake-status"></div>
+            SEISMIC STATUS: IDLE
         </div>
     </div>
 
-    <!-- Controls Panel -->
-    <div class="fixed left-4 top-24 bottom-4 w-80 z-10 overflow-y-auto hidden md:block">
-        <div class="glass-panel rounded-lg p-5 space-y-6">
-            <div class="flex items-center gap-2 text-cyan-400 border-b border-cyan-500/20 pb-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
-                <h2 class="text-sm font-bold uppercase tracking-wider">Source Parameters</h2>
-            </div>
-            
-            <!-- Magnitude -->
-            <div class="space-y-2">
-                <div class="flex justify-between items-baseline">
-                    <label class="text-xs text-slate-400 font-bold uppercase">Magnitude (Mw)</label>
-                    <span id="magnitude-value" class="text-xl font-mono text-orange-400 glow-text">5.0</span>
-                </div>
-                <input type="range" id="magnitude" min="3.0" max="9.5" step="0.1" value="5" class="w-full">
-                <div class="w-full h-1 bg-gradient-to-r from-green-900 via-yellow-900 to-red-900 rounded opacity-50 mt-1"></div>
-            </div>
-            
-            <!-- Depth -->
-            <div class="space-y-2">
-                <div class="flex justify-between items-baseline">
-                    <label class="text-xs text-slate-400 font-bold uppercase">Hypocenter Depth</label>
-                    <span id="depth-value" class="text-sm font-mono text-cyan-300">10 km</span>
-                </div>
-                <input type="range" id="depth" min="1" max="100" step="1" value="10" class="w-full">
-            </div>
-            
-            <!-- Fault Type -->
-            <div class="space-y-2">
-                <label class="text-xs text-slate-400 font-bold uppercase">Fault Mechanism</label>
-                <div class="grid grid-cols-3 gap-1">
-                    <button class="fault-btn active bg-cyan-900/50 border border-cyan-500/50 text-cyan-300 text-[10px] py-2 rounded hover:bg-cyan-800 transition-colors" data-type="strike-slip">Strike-Slip</button>
-                    <button class="fault-btn bg-slate-800/50 border border-slate-700 text-slate-400 text-[10px] py-2 rounded hover:bg-slate-700 transition-colors" data-type="normal">Normal</button>
-                    <button class="fault-btn bg-slate-800/50 border border-slate-700 text-slate-400 text-[10px] py-2 rounded hover:bg-slate-700 transition-colors" data-type="reverse">Reverse</button>
-                </div>
-            </div>
-
-            <!-- Wave Physics Toggles -->
-            <div class="space-y-2 pt-2 border-t border-cyan-500/20">
-                <label class="text-xs text-slate-400 font-bold uppercase">Wave Components</label>
-                <div class="flex gap-2">
-                    <button id="wave-p" class="flex-1 py-1 px-2 rounded bg-blue-500/20 border border-blue-500/50 text-blue-300 text-xs font-mono">P-Wave</button>
-                    <button id="wave-s" class="flex-1 py-1 px-2 rounded bg-green-500/20 border border-green-500/50 text-green-300 text-xs font-mono">S-Wave</button>
-                    <button id="wave-surf" class="flex-1 py-1 px-2 rounded bg-red-500/20 border border-red-500/50 text-red-300 text-xs font-mono">Surface</button>
-                </div>
-            </div>
-            
-            <!-- Actions -->
-            <div class="space-y-3 pt-4">
-                <button id="trigger-btn" class="w-full py-3 rounded bg-gradient-to-r from-red-700 to-orange-700 hover:from-red-600 hover:to-orange-600 text-white font-bold tracking-wider shadow-lg shadow-red-900/20 transition-all border border-red-500/30 flex items-center justify-center gap-2 group">
-                    <span class="w-2 h-2 bg-white rounded-full group-hover:animate-ping"></span>
-                    INITIATE RUPTURE
-                </button>
-                <button id="reset-btn" class="w-full py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs text-slate-300 font-mono transition-colors">
-                    RESET SYSTEM
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Right Panel - Telemetry -->
-    <div class="fixed right-4 top-24 bottom-4 w-96 z-10 overflow-y-auto hidden md:block space-y-4">
+    <!-- Legend -->
+    <div class="legend">
+        <div class="label" style="margin-bottom: 10px; color: #fff;">Structural Stress (G-Load)</div>
+        <div class="legend-item">Nominal <div class="color-box" style="background: #e0e0e0;"></div></div>
+        <div class="legend-item">Warning (>0.1g) <div class="color-box" style="background: #ffcc00;"></div></div>
+        <div class="legend-item">Critical (>0.5g) <div class="color-box" style="background: #ff3333;"></div></div>
         
-        <!-- Recording & Playback -->
-        <div class="glass-panel rounded-lg p-4">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-xs font-bold text-pink-400 uppercase">Simulation Recorder</h3>
-                <button id="record-btn" class="px-2 py-1 rounded bg-red-500/30 border border-red-500/50 text-red-300 text-xs font-mono hover:bg-red-500/50 transition-colors">● REC</button>
+        <div class="label" style="margin-top: 15px; margin-bottom: 10px; color: #fff;">Site Amplification</div>
+        <div class="legend-item">Basin (Soft Soil - 1.5x) <div class="color-box" style="background: #112233;"></div></div>
+        <div class="legend-item">Highlands (Bedrock - 0.7x) <div class="color-box" style="background: #335544;"></div></div>
+    </div>
+
+    <!-- Bottom Dashboard -->
+    <div id="dashboard">
+        <!-- Live Seismograph -->
+        <div class="panel">
+            <div class="label" style="margin-bottom: 8px;">Station: SC-01 (Basin Center)</div>
+            <div id="seismograph-wrapper">
+                <div id="overlay-grid"></div>
+                <canvas id="seismograph" width="400" height="100"></canvas>
             </div>
-            <div class="space-y-2">
-                <div class="text-[10px] text-slate-400">Timeline <span id="playback-time">0.0s</span></div>
-                <div class="timeline-track" id="timeline-container">
-                    <div class="timeline-progress" id="timeline-progress" style="width: 0%"></div>
-                </div>
-                <div class="flex gap-2 mt-2">
-                    <button id="play-btn" class="flex-1 py-1 px-2 rounded bg-blue-500/20 border border-blue-500/50 text-blue-300 text-[10px] font-mono hover:bg-blue-500/30">▶ PLAY</button>
-                    <button id="stop-btn" class="flex-1 py-1 px-2 rounded bg-slate-700 border border-slate-600 text-slate-400 text-[10px] font-mono hover:bg-slate-600">⏹ STOP</button>
-                    <button id="clear-btn" class="flex-1 py-1 px-2 rounded bg-slate-700 border border-slate-600 text-slate-400 text-[10px] font-mono hover:bg-slate-600">CLR</button>
-                </div>
+        </div>
+
+        <!-- Readouts -->
+        <div class="panel data-readout">
+            <div>
+                <span class="label">Est. Magnitude</span>
+                <div class="value" id="val-mag">--</div>
+            </div>
+            <div style="margin-top: 10px;">
+                <span class="label">Peak Acceleration</span>
+                <div class="value" id="val-pga">0.00 g</div>
             </div>
         </div>
         
-        <!-- Seismograph -->
-        <div class="glass-panel rounded-lg p-4 relative overflow-hidden">
-            <div class="absolute top-0 left-0 w-1 h-full bg-cyan-500"></div>
-            <h3 class="text-xs font-bold text-cyan-400 uppercase mb-2 flex justify-between">
-                <span>Vertical Component (Z)</span>
-                <span class="text-[10px] opacity-50">STATION: CITY-01</span>
-            </h3>
-            <div class="bg-slate-900/80 rounded border border-slate-700 p-2 h-32 relative">
-                <!-- Grid Lines -->
-                <div class="absolute inset-0 grid grid-rows-4 w-full h-full pointer-events-none opacity-20">
-                    <div class="border-b border-cyan-500"></div>
-                    <div class="border-b border-cyan-500"></div>
-                    <div class="border-b border-cyan-500"></div>
-                </div>
-                <svg id="seismograph" width="100%" height="100%" viewBox="0 0 350 100" preserveAspectRatio="none">
-                    <polyline id="seismo-line" class="seismograph-line" fill="none" stroke="#38bdf8" stroke-width="1.5" points="0,50 350,50"/>
-                </svg>
+        <div class="panel data-readout">
+            <div>
+                <span class="label">Target Coordinates</span>
+                <div class="value" id="val-coords" style="font-size: 14px;">AUTO</div>
             </div>
-        </div>
-
-        <!-- Intensity Heat Map -->
-        <div class="glass-panel rounded-lg p-4">
-            <h3 class="text-xs font-bold text-yellow-400 uppercase mb-3">Intensity Distribution</h3>
-            <div class="space-y-2">
-                <div class="heatmap-bar">
-                    <span class="heatmap-label" style="left: 2%">I</span>
-                    <span class="heatmap-label" style="left: 20%">II</span>
-                    <span class="heatmap-label" style="left: 40%">IV</span>
-                    <span class="heatmap-label" style="left: 55%">VI</span>
-                    <span class="heatmap-label" style="left: 70%">VIII</span>
-                    <span class="heatmap-label" style="left: 87%">X</span>
-                </div>
-                <div class="text-[10px] text-slate-400 mt-6 space-y-1">
-                    <div class="flex justify-between">
-                        <span>Peak Ground Accel:</span>
-                        <span id="heatmap-pga" class="font-mono text-cyan-400">0.00 g</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span>Intensity Zone:</span>
-                        <span id="heatmap-intensity" class="font-mono text-yellow-400">I (No Damage)</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Metrics Grid -->
-        <div class="grid grid-cols-2 gap-4">
-            <div class="glass-panel p-3 rounded-lg border-t-2 border-t-yellow-500">
-                <div class="text-[10px] text-slate-400 uppercase">Est. Energy</div>
-                <div id="energy-val" class="text-lg font-mono text-yellow-400">0.0 J</div>
-            </div>
-            <div class="glass-panel p-3 rounded-lg border-t-2 border-t-red-500">
-                <div class="text-[10px] text-slate-400 uppercase">PGA (g)</div>
-                <div id="pga-val" class="text-lg font-mono text-red-400">0.00</div>
-            </div>
-        </div>
-
-        <!-- Damage Report -->
-        <div class="glass-panel rounded-lg p-4">
-            <h3 class="text-xs font-bold text-slate-300 uppercase mb-3">Structural Integrity</h3>
-            <div class="flex items-center gap-4 mb-4">
-                <div class="relative w-16 h-16 flex items-center justify-center">
-                    <svg class="w-full h-full -rotate-90">
-                        <circle cx="32" cy="32" r="28" stroke="#1e293b" stroke-width="4" fill="none"/>
-                        <circle id="damage-ring" cx="32" cy="32" r="28" stroke="#ef4444" stroke-width="4" fill="none" stroke-dasharray="175" stroke-dashoffset="175" class="transition-all duration-500"/>
-                    </svg>
-                    <span id="damage-pct" class="absolute text-sm font-bold">0%</span>
-                </div>
-                <div class="flex-1 space-y-1">
-                    <div class="flex justify-between text-xs">
-                        <span class="text-green-400">Intact</span>
-                        <span id="count-intact" class="font-mono">100%</span>
-                    </div>
-                    <div class="flex justify-between text-xs">
-                        <span class="text-yellow-400">Minor</span>
-                        <span id="count-minor" class="font-mono">0%</span>
-                    </div>
-                    <div class="flex justify-between text-xs">
-                        <span class="text-red-400">Critical</span>
-                        <span id="count-critical" class="font-mono">0%</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Wave Legend -->
-        <div class="glass-panel rounded-lg p-4 text-[10px] font-mono text-slate-400">
-            <div class="flex items-center gap-2 mb-1">
-                <div class="w-3 h-1 bg-blue-500"></div> P-Wave (Compressional) - Fast
-            </div>
-            <div class="flex items-center gap-2 mb-1">
-                <div class="w-3 h-1 bg-green-500"></div> S-Wave (Shear) - Damage start
-            </div>
-            <div class="flex items-center gap-2">
-                <div class="w-3 h-1 bg-red-500"></div> Rayleigh (Surface) - Max Shake
+            <div style="margin-top: 10px;">
+                <span class="label">Hypocenter Depth</span>
+                <div class="value" id="val-depth">-- km</div>
             </div>
         </div>
     </div>
 
-    <!-- Mobile Toggle -->
-    <button id="mobile-menu-btn" class="md:hidden fixed bottom-6 right-6 z-50 bg-cyan-600 text-white p-3 rounded-full shadow-lg shadow-cyan-900/50">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
-    </button>
-    
-    <!-- Mobile Menu Overlay -->
-    <div id="mobile-menu" class="fixed inset-0 bg-slate-900/95 z-40 hidden flex-col p-6 overflow-y-auto">
-        <button id="close-mobile" class="self-end mb-4 text-slate-400"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
-        <!-- Content injected via JS -->
-    </div>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import * as CANNON from 'cannon-es';
+        import { Pane } from 'tweakpane';
 
-    <script>
-        // --- CONFIGURATION & STATE ---
+        // ==========================================
+        // 1. SCIENTIFIC CONSTANTS & CONFIG
+        // ==========================================
+
         const CONFIG = {
-            gridSize: 200,      // Size of the world plane
-            gridSegments: 100,  // Resolution of terrain
-            mountainHeight: 15, // Max height of peripheral mountains
-            cityRadius: 40,     // Flat area in center
-            colors: {
-                bg: 0x020617,
-                ground: 0x0f172a,
-                grid: 0x0ea5e9, // Cyan-500
-                building: 0x94a3b8
-            },
-            speeds: { P: 40, S: 22, SURF: 16 }
+            worldSize: 120,    
+            resolution: 128,   
+            scale: 120 / 127   
         };
 
-        let state = {
-            mag: 5.0,
-            depth: 10,
-            active: false,
-            startTime: 0,
-            faultType: 'strike-slip',
-            waves: { p: true, s: true, surf: true }
+        const SEISMIC = {
+            P_VELOCITY: 30.0,    
+            S_VELOCITY: 18.0,
+            SURF_VELOCITY: 15.0,
+            ATTENUATION: 0.05
         };
 
-    // THREE.js Globals
-    let scene, camera, renderer, clock;
-    let terrainMesh, gridMesh, buildings = [], epicenterMesh;
-    let waveRings = [];
-    let seismographData = new Array(350).fill(50);
-    let composer = null;
-    let crackSprites = [];
-    let buildingCracks = [];
-        let fps = 60;
-        const fpsSmoothing = 0.92;
+        // ==========================================
+        // 2. PROCEDURAL TERRAIN LOGIC
+        // ==========================================
         
-        // Recording & Playback
-        let recordedFrames = [];
-        let isRecording = false;
-        let isPlayingBack = false;
-        let playbackIndex = 0;
-        
-        // Particle System
-        let particles = [];
-        const particleGeometry = new THREE.BufferGeometry();
-        let particleSystem = null;
-        
-        // Audio Context
-        let audioContext = null;
-        let isAudioInitialized = false;
-
-        function initSeismograph() {
-            // Ensure initial SVG points are populated
-            const points = seismographData.map((v, i) => `${i},${v}`).join(' ');
-            const line = document.getElementById('seismo-line');
-            if (line) line.setAttribute('points', points);
+        function pseudoNoise(x, z) {
+            return Math.sin(x * 0.1) * Math.cos(z * 0.1) * 2 + Math.sin(x * 0.3 + z * 0.2) * 1;
         }
 
-        // --- INITIALIZATION ---
-        function init() {
-            // Scene Setup
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(CONFIG.colors.bg);
-            scene.fog = new THREE.FogExp2(CONFIG.colors.bg, 0.012); // Slightly denser fog for atmosphere
-
-            // Camera
-            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(50, 40, 50);
-            camera.lookAt(0, 0, 0);
-
-            // Renderer
-            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            renderer.outputEncoding = THREE.sRGBEncoding;
-            renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1.0;
-            renderer.physicallyCorrectLights = true;
-            document.getElementById('canvas-container').appendChild(renderer.domElement);
-
-            // Postprocessing composer (bloom + fxaa)
-            try {
-                composer = new THREE.EffectComposer(renderer);
-                const renderPass = new THREE.RenderPass(scene, camera);
-                composer.addPass(renderPass);
-                const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.6, 0.8);
-                bloomPass.threshold = 0.08;  // Lower threshold = more glow
-                bloomPass.strength = 1.8;    // Stronger bloom
-                bloomPass.radius = 0.6;      // Larger bloom radius
-                composer.addPass(bloomPass);
-                const fxaaPass = new THREE.ShaderPass(THREE.FXAAShader);
-                fxaaPass.material.uniforms['resolution'].value.set(1 / window.innerWidth, 1 / window.innerHeight);
-                composer.addPass(fxaaPass);
-            } catch (e) {
-                console.warn('Postprocessing not initialized', e);
-                composer = null;
-            }
-
-            // Lights
-            const ambient = new THREE.HemisphereLight(0xffffff, 0x0f172a, 0.6); // Sky/Ground color
-            ambient.name = 'ambientLight';
-            scene.add(ambient);
-
-            const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-            sun.position.set(100, 100, 50);
-            sun.castShadow = true;
-            sun.shadow.mapSize.width = 2048;
-            sun.shadow.mapSize.height = 2048;
-            sun.shadow.camera.near = 0.5;
-            sun.shadow.camera.far = 500;
-            sun.shadow.camera.left = -100;
-            sun.shadow.camera.right = 100;
-            sun.shadow.camera.top = 100;
-            sun.shadow.camera.bottom = -100;
-            sun.shadow.bias = -0.0001;
-            sun.name = 'sun';
-            scene.add(sun);
+        function getTerrainHeight(x, z) {
+            const dist = Math.sqrt(x*x + z*z);
+            let basinFactor = Math.max(0, dist - 35) / 15; 
+            basinFactor = Math.pow(basinFactor, 1.5); 
+            const noise = pseudoNoise(x, z);
             
-            // Add dramatic fill light with enhanced color during rupture
-            const fillLight = new THREE.DirectionalLight(0x87ceeb, 0.4);
-            fillLight.position.set(-100, 50, -100);
-            fillLight.name = 'fillLight';
-            scene.add(fillLight);
+            let h = basinFactor * 8.0; 
+            if (dist > 40) h += noise;
             
-            // Glow/Bloom effect via emissive materials (handled in materials)
-            // Alternative: Use post-processing if performance allows
-
-            // Stars
-            createStars();
-
-            // Terrain & Grid
-            createTerrain();
-
-            // Buildings
-            createCity();
-            
-            // Visual Effects (Wave Rings)
-            createEffects();
-
-            // Create textures for particles & cracks
-            createParticleTexture();
-            createCrackTexture();
-
-            // Controls
-            setupInteractions();
-
-            // Loop
-            clock = new THREE.Clock();
-            animate();
-            
-            // Initial UI Update
-            updateCalculations();
-            initSeismograph();
+            return Math.max(0, h);
         }
 
-        function createStars() {
-            const geometry = new THREE.BufferGeometry();
-            const vertices = [];
-            for (let i = 0; i < 2000; i++) {
-                vertices.push(
-                    (Math.random() - 0.5) * 800,
-                    Math.random() * 400, // Dome
-                    (Math.random() - 0.5) * 800
-                );
-            }
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-            const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.8, transparent: true, opacity: 0.8 });
-            scene.add(new THREE.Points(geometry, material));
-        }
+        // ==========================================
+        // 3. PHYSICS & SITE AMPLIFICATION
+        // ==========================================
 
-        function createTerrain() {
-            // Custom Heightmap Generation
-            const geometry = new THREE.PlaneGeometry(CONFIG.gridSize, CONFIG.gridSize, CONFIG.gridSegments, CONFIG.gridSegments);
-            const pos = geometry.attributes.position;
-            
-            // Rotate to XZ plane first so our Z logic works for height later if we used Z-up, 
-            // but Three is Y-up. Let's keep PlaneGeometry defaults (XY) and rotate mesh -90 X.
-            // Vertices: X, Y (Height in local), Z (0)
-            
-            // Generate Noise (Simple procedural hills on edges)
-            for (let i = 0; i < pos.count; i++) {
-                const x = pos.getX(i);
-                const y = pos.getY(i); // This will become world Z after rotation
-                const dist = Math.sqrt(x*x + y*y);
-                
-                let z = 0; // Height
-                
-                // Create a basin: Flat in middle, rougher further out
-                if (dist > CONFIG.cityRadius) {
-                    const noise = Math.sin(x * 0.1) * Math.cos(y * 0.1) * 2 + 
-                                  Math.sin(x * 0.3 + y * 0.2) * 1.5;
-                    // Ramp up height
-                    const ramp = (dist - CONFIG.cityRadius) / (CONFIG.gridSize/2 - CONFIG.cityRadius);
-                    z = noise + (ramp * ramp * CONFIG.mountainHeight);
-                } else {
-                    // Slight unevenness in city
-                    z = Math.sin(x*0.5)*0.2 + Math.cos(y*0.5)*0.2;
-                }
-                
-                pos.setZ(i, z);
-            }
-            
-            geometry.computeVertexNormals();
-            
-            // Store original positions for physics deformation
-            geometry.userData.originalPos = pos.array.slice();
+        function calculateGroundMotion(x, z, y, time, quake) {
+            if (!quake.active || time < quake.startTime) return { disp: 0, vel: 0, accel: 0 };
 
-            // 1. Solid Ground Mesh
-            const material = new THREE.MeshStandardMaterial({
-                color: CONFIG.colors.ground,
-                roughness: 0.85,
-                metalness: 0.05,
-                flatShading: false, // Smooth shading for natural look
-                wireframe: false
-            });
-            terrainMesh = new THREE.Mesh(geometry, material);
-            terrainMesh.rotation.x = -Math.PI / 2;
-            terrainMesh.receiveShadow = true;
-            terrainMesh.castShadow = true;
-            scene.add(terrainMesh);
+            const dx = x - quake.epicenter.x;
+            const dz = z - quake.epicenter.y;
+            const dist = Math.sqrt(dx*dx + dz*dz + (quake.depth * 0.2)**2);
+            
+            const t = time - quake.startTime;
+            if (t < 0) return { disp: 0, vel: 0, accel: 0 };
 
-            // 2. Crack visualization overlay (wireframe for damage)
-            const crackGeo = new THREE.WireframeGeometry(geometry);
-            const crackMat = new THREE.LineBasicMaterial({ 
-                color: 0xef4444, 
-                transparent: true, 
-                opacity: 0,
-                linewidth: 2
-            });
-            const crackMesh = new THREE.LineSegments(crackGeo, crackMat);
-            crackMesh.rotation.x = -Math.PI / 2;
-            crackMesh.position.y = 0.1;
-            crackMesh.name = 'crackmesh';
-            scene.add(crackMesh);
-            
-            // Grid overlay
-            const wireMat = new THREE.MeshBasicMaterial({
-                color: CONFIG.colors.grid,
-                wireframe: true,
-                transparent: true,
-                opacity: 0.08
-            });
-            gridMesh = new THREE.Mesh(geometry, wireMat);
-            gridMesh.rotation.x = -Math.PI / 2;
-            gridMesh.position.y = 0.05;
-            scene.add(gridMesh);
-        }
+            let totalDisp = 0;
+            const amplitudeScale = Math.pow(10, quake.magnitude - 5.0) * 0.15;
 
-        function createCity() {
-            // Create smooth building geometry with beveled edges
-            function createBuildingGeometry(width, height, depth) {
-                const geo = new THREE.BoxGeometry(width, height, depth, 4, 6, 4);
-                // Smooth the mesh
-                const posAttr = geo.attributes.position;
-                const pos = posAttr.array;
-                // Apply subdivision-like smoothing
-                geo.computeVertexNormals();
-                return geo;
-            }
-            
-            // City layout: Grid-like center
-            for(let x = -30; x <= 30; x+= 10) {
-                for(let z = -30; z <= 30; z+= 10) {
-                    if (Math.random() > 0.8) continue; // Random gaps
-                    
-                    // Variation
-                    const height = 5 + Math.random() * 25;
-                    const width = 4 + Math.random() * 4;
-                    const depth = 4 + Math.random() * 4;
-                    
-                    const geometry = createBuildingGeometry(width, height, depth);
-                    
-                    const mat = new THREE.MeshStandardMaterial({
-                        color: CONFIG.colors.building,
-                        roughness: 0.5,
-                        metalness: 0.3,
-                        emissive: 0x1a2a3a,
-                        emissiveIntensity: 0.2
-                    });
-                    
-                    const mesh = new THREE.Mesh(geometry, mat);
-                    
-                    // Position (Y is half height)
-                    mesh.position.set(
-                        x + (Math.random()-0.5)*5,
-                        height/2,
-                        z + (Math.random()-0.5)*5
-                    );
-                    
-                    mesh.castShadow = true;
-                    mesh.receiveShadow = true;
-                    
-                    scene.add(mesh);
-                    
-                    buildings.push({
-                        mesh: mesh,
-                        originalPos: mesh.position.clone(),
-                        originalRot: mesh.rotation.clone(),
-                        originalScale: new THREE.Vector3(width, height, depth),
-                        height: height,
-                        damage: 0,
-                        naturalFreq: 10 / height,
-                        crackAmount: 0
-                    });
-                }
-            }
-            
-            // Epicenter Marker
-            const epiGeo = new THREE.CylinderGeometry(0, 4, 10, 4);
-            const epiMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, transparent: true, opacity: 0 });
-            epicenterMesh = new THREE.Mesh(epiGeo, epiMat);
-            epicenterMesh.position.y = 5;
-            scene.add(epicenterMesh);
-        }
+            // Site Amplification Logic
+            let siteFactor = 1.0;
+            if (y < 2.0) siteFactor = 1.5; // Basin amplification
+            else if (y > 8.0) siteFactor = 0.7; // Bedrock attenuation
 
-        function createEffects() {
-            // Wavefront rings (P, S, Surf)
-            const colors = [0x3b82f6, 0x22c55e, 0xef4444];
-            for(let i=0; i<3; i++) {
-                const geo = new THREE.RingGeometry(0.9, 1, 64);
-                const mat = new THREE.MeshBasicMaterial({ 
-                    color: colors[i], 
-                    side: THREE.DoubleSide, 
-                    transparent: true, 
-                    opacity: 0,
-                    depthTest: false
-                });
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.rotation.x = -Math.PI/2;
-                mesh.position.y = 2;
-                mesh.renderOrder = 999; // Draw on top
-                scene.add(mesh);
-                waveRings.push(mesh);
-            }
-            
-            // Particle System for debris/dust
-            initParticleSystem();
-        }
-        
-        function initParticleSystem() {
-            const count = 5000;
-            const positions = new Float32Array(count * 3);
-            const velocities = new Float32Array(count * 3);
-            const life = new Float32Array(count);
-            const sizes = new Float32Array(count);
-            
-            for (let i = 0; i < count; i++) {
-                positions[i*3] = (Math.random() - 0.5) * 2;
-                positions[i*3+1] = (Math.random() - 0.5) * 2;
-                positions[i*3+2] = (Math.random() - 0.5) * 2;
+            const wave = (speed, freq, ampFactor) => {
+                const arrival = dist / speed;
+                if (t < arrival) return 0;
                 
-                velocities[i*3] = (Math.random() - 0.5) * 0.8;
-                velocities[i*3+1] = Math.random() * 0.5;
-                velocities[i*3+2] = (Math.random() - 0.5) * 0.8;
+                const localT = t - arrival;
+                const envelope = (localT) * Math.exp(-localT * 2.5);
+                const decay = Math.exp(-dist * SEISMIC.ATTENUATION) / (Math.pow(dist, 0.4) + 1.0);
                 
-                life[i] = 0;
-                sizes[i] = Math.random() * 2 + 0.5;
-            }
-            
-            particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            particleGeometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
-            particleGeometry.setAttribute('life', new THREE.BufferAttribute(life, 1));
-            particleGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-            
-            const canvas = document.createElement('canvas');
-            canvas.width = 64;
-            canvas.height = 64;
-            const ctx = canvas.getContext('2d');
-            const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-            gradient.addColorStop(0, 'rgba(255,255,255,1)');
-            gradient.addColorStop(0.3, 'rgba(220,200,160,0.9)');
-            gradient.addColorStop(0.6, 'rgba(180,140,90,0.6)');
-            gradient.addColorStop(1, 'rgba(100,80,50,0)');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 64, 64);
-            
-            const texture = new THREE.CanvasTexture(canvas);
-            
-            const particleMat = new THREE.PointsMaterial({
-                map: texture,
-                color: 0xf0c080,  // Even warmer golden dust
-                size: 2.8,
-                transparent: true,
-                opacity: 0.8,
-                sizeAttenuation: true,
-                depthWrite: false,
-                fog: true,  // Particles respect fog
-                emissive: 0xffb366,
-                emissiveIntensity: 0.6,
-                blending: THREE.AdditiveBlending
-            });
-            
-            particleSystem = new THREE.Points(particleGeometry, particleMat);
-            particleSystem.frustumCulled = false;
-            scene.add(particleSystem);
-        }
-
-        // Create a canvas-based particle texture and attach to the particle material
-        function createParticleTexture() {
-            try {
-                const size = 128;
-                const canvas = document.createElement('canvas');
-                canvas.width = size;
-                canvas.height = size;
-                const ctx = canvas.getContext('2d');
-                const grad = ctx.createRadialGradient(size/2, size/2, 2, size/2, size/2, size/1.8);
-                grad.addColorStop(0, 'rgba(255,255,255,1)');
-                grad.addColorStop(0.2, 'rgba(220,190,150,0.9)');
-                grad.addColorStop(0.5, 'rgba(180,120,80,0.7)');
-                grad.addColorStop(1, 'rgba(0,0,0,0)');
-                ctx.fillStyle = grad;
-                ctx.fillRect(0,0,size,size);
-                const tex = new THREE.CanvasTexture(canvas);
-                if (particleSystem && particleSystem.material) {
-                    particleSystem.material.map = tex;
-                    particleSystem.material.needsUpdate = true;
-                }
-            } catch (e) {
-                console.warn('Particle texture creation failed', e);
-            }
-        }
-
-        // Create a crack texture (returns a texture)
-        function createCrackTexture() {
-            const size = 256;
-            const canvas = document.createElement('canvas');
-            canvas.width = size;
-            canvas.height = size;
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0,0,size,size);
-            
-            // Draw dramatic radiating cracks from center
-            const centerX = size / 2;
-            const centerY = size / 2;
-            
-            // Main crack lines radiating outward
-            ctx.strokeStyle = 'rgba(40,40,40,1)';
-            ctx.lineWidth = 4;
-            for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 6) {
-                ctx.beginPath();
-                ctx.moveTo(centerX, centerY);
-                const length = size * 0.45;
-                ctx.lineTo(
-                    centerX + Math.cos(angle) * length,
-                    centerY + Math.sin(angle) * length
-                );
-                ctx.stroke();
-            }
-            
-            // Smaller secondary cracks
-            ctx.strokeStyle = 'rgba(30,30,30,0.8)';
-            ctx.lineWidth = 2;
-            for (let i = 0; i < 15; i++) {
-                ctx.beginPath();
-                const startAngle = Math.random() * Math.PI * 2;
-                const startDist = Math.random() * size * 0.3;
-                const sx = centerX + Math.cos(startAngle) * startDist;
-                const sy = centerY + Math.sin(startAngle) * startDist;
-                ctx.moveTo(sx, sy);
-                for (let s = 0; s < 4; s++) {
-                    const nx = sx + Math.cos(startAngle + (Math.random()-0.5)*0.8) * (Math.random()*size*0.2);
-                    const ny = sy + Math.sin(startAngle + (Math.random()-0.5)*0.8) * (Math.random()*size*0.2);
-                    ctx.lineTo(nx, ny);
-                }
-                ctx.stroke();
-            }
-            
-            return new THREE.CanvasTexture(canvas);
-        }
-
-        function spawnGroundCrack(position) {
-            const tex = createCrackTexture();
-            const mat = new THREE.SpriteMaterial({map: tex, transparent: true, opacity: 0.9, depthWrite: false});
-            const sprite = new THREE.Sprite(mat);
-            sprite.scale.set(18, 18, 1);
-            sprite.position.copy(position);
-            sprite.position.y = 0.05;
-            scene.add(sprite);
-            crackSprites.push(sprite);
-            return sprite;
-        }
-
-        function spawnBuildingCrackSprite(pos) {
-            const tex = createCrackTexture();
-            const mat = new THREE.SpriteMaterial({map: tex, transparent: true, opacity: 0.9, depthWrite: false});
-            const sprite = new THREE.Sprite(mat);
-            sprite.scale.set(6, 6, 1);
-            sprite.position.copy(pos);
-            sprite.position.y += 6;
-            scene.add(sprite);
-            return sprite;
-        }
-        
-        function spawnParticles(count = 100) {
-            const pos = particleGeometry.attributes.position.array;
-            const vel = particleGeometry.attributes.velocity.array;
-            const life = particleGeometry.attributes.life.array;
-            
-            for (let i = 0; i < count && i < pos.length/3; i++) {
-                const idx = Math.floor(Math.random() * (pos.length/3));
-                if (life[idx] <= 0) {
-                    // Spawn near buildings or center with radial spread
-                    const angle = Math.random() * Math.PI * 2;
-                    const radius = Math.random() * 15;
-                    pos[idx*3] = Math.cos(angle) * radius;
-                    pos[idx*3+1] = Math.random() * 5;
-                    pos[idx*3+2] = Math.sin(angle) * radius;
-                    
-                    // Velocity spreads outward and upward (radial burst)
-                    const vAngle = Math.random() * Math.PI * 2;
-                    const vSpeed = 0.15 + Math.random() * 0.35;  // Faster particles
-                    vel[idx*3] = Math.cos(vAngle) * vSpeed;
-                    vel[idx*3+1] = 0.15 + Math.random() * 0.25;  // More upward bias
-                    vel[idx*3+2] = Math.sin(vAngle) * vSpeed;
-                    
-                    life[idx] = 1.0;
-                }
-            }
-            
-            particleGeometry.attributes.position.needsUpdate = true;
-            particleGeometry.attributes.velocity.needsUpdate = true;
-            particleGeometry.attributes.life.needsUpdate = true;
-        }
-        
-        function updateParticles() {
-            const pos = particleGeometry.attributes.position.array;
-            const vel = particleGeometry.attributes.velocity.array;
-            const life = particleGeometry.attributes.life.array;
-            const sizes = particleGeometry.attributes.size.array;
-            
-            for (let i = 0; i < life.length; i++) {
-                if (life[i] > 0) {
-                    life[i] -= 0.008; // Longer fade
-                    pos[i*3] += vel[i*3] * 0.2;
-                    pos[i*3+1] -= 0.02; // Lighter gravity
-                    pos[i*3+2] += vel[i*3+2] * 0.2;
-                    
-                    // Particle grows slightly as it ages (dust expansion)
-                    sizes[i] = (1 - life[i]) * 3 + 0.5;
-                }
-            }
-            
-            particleGeometry.attributes.position.needsUpdate = true;
-            particleGeometry.attributes.life.needsUpdate = true;
-            particleGeometry.attributes.size.needsUpdate = true;
-            
-            // Fade material based on activity
-            const avgLife = life.reduce((a, b) => a + b) / life.length;
-            particleSystem.material.opacity = Math.min(0.8, 0.2 + avgLife * 0.6);
-        }
-        
-        function initAudio() {
-            if (isAudioInitialized) return;
-            if (!window.AudioContext && !window.webkitAudioContext) {
-                console.warn('Web Audio API not supported');
-                return;
-            }
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            isAudioInitialized = true;
-        }
-        
-        function playSeismicRumble(magnitude, duration = 2) {
-            if (!isAudioInitialized) return;
-            
-            const now = audioContext.currentTime;
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            const filter = audioContext.createBiquadFilter();
-            
-            // Low frequency rumble
-            oscillator.frequency.setValueAtTime(20 + magnitude * 5, now);
-            oscillator.frequency.exponentialRampToValueAtTime(10, now + duration);
-            
-            filter.type = 'lowpass';
-            filter.frequency.value = 100;
-            
-            gainNode.gain.setValueAtTime(0.1 * (magnitude / 10), now);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration);
-            
-            oscillator.connect(filter);
-            filter.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            oscillator.start(now);
-            oscillator.stop(now + duration);
-        }
-
-        // Screen shake effect
-        let shakeAmount = 0;
-        function applyScreenShake(elapsed, magnitude) {
-            if (elapsed < 0.5) {
-                shakeAmount = magnitude * 0.8;
-            } else if (elapsed < 10) {
-                shakeAmount = magnitude * Math.exp(-(elapsed - 0.5) * 0.2);
-            } else {
-                shakeAmount = 0;
-            }
-            
-            if (shakeAmount > 0) {
-                camera.position.x += (Math.random() - 0.5) * shakeAmount * 0.5;
-                camera.position.y += (Math.random() - 0.5) * shakeAmount * 0.3;
-                camera.position.z += (Math.random() - 0.5) * shakeAmount * 0.5;
-            }
-        }
-
-        // Dynamic lighting pulses synchronized with waves
-        function updateDynamicLighting(elapsed, magnitude) {
-            const sun = scene.getObjectByName('sun');
-            const fill = scene.getObjectByName('fillLight');
-            if (!sun) return;
-            
-            // P-wave pulse (fast, weak)
-            const pPhase = (elapsed * 5) % (Math.PI * 2);
-            // S-wave pulse (slower, stronger)
-            const sPhase = (elapsed * 2.5) % (Math.PI * 2);
-            // Surface wave (rolling)
-            const surfPhase = elapsed % (Math.PI * 2);
-            
-            const pGlow = Math.max(0, Math.sin(pPhase) * 0.1);
-            const sGlow = Math.max(0, Math.sin(sPhase) * 0.2);
-            const surfGlow = Math.max(0, Math.sin(surfPhase) * 0.15);
-            
-            sun.intensity = 1.2 + pGlow + sGlow + surfGlow;
-            
-            // Also modulate fill light color based on S-wave (creates colored glow)
-            if (fill) {
-                const sIntensity = Math.max(0, Math.sin(sPhase));
-                fill.intensity = 0.4 + (sIntensity * 0.3);
-                // Transition color from blue to orange during peak
-                const warmth = sIntensity * 0.6;
-                fill.color.setHSL(0.55 - warmth * 0.4, 0.8, 0.5 + warmth * 0.2);
-            }
-        }
-
-        // --- PHYSICS ENGINE ---
-        function updatePhysics(delta) {
-            if (!state.active) return;
-            
-            const elapsed = clock.getElapsedTime() - state.startTime;
-            const epicenter = new THREE.Vector3(0, 0, 0); // Simplified for now
-            
-            // Apply screen shake and dynamic lighting
-            applyScreenShake(elapsed, state.mag);
-            updateDynamicLighting(elapsed, state.mag);
-            
-            // Intensify fog during rupture
-            if (scene.fog) {
-                const baseFog = 0.012;
-                const dynamicFog = baseFog + (state.mag / 10) * Math.exp(-elapsed * 0.1);
-                scene.fog.density = Math.min(0.05, dynamicFog);
-            }
-            
-            // Spawn particles during rupture
-            if (elapsed < 10) {
-                spawnParticles(Math.floor(state.mag * 20));
-            }
-            
-            // 1. Terrain Deformation
-            const posAttr = terrainMesh.geometry.attributes.position;
-            const originalPos = terrainMesh.geometry.userData.originalPos;
-            
-            // Optimization: Only iterate reasonably close vertices? No, GPU/CPU tradeoff.
-            // JS loop over 100x100 = 10k vertices is fine for modern desktops.
-            
-            const M = state.mag;
-            const AmpBase = Math.pow(10, M - 5) * 2.0; // Amplitude scaling
-            
-            for(let i=0; i < posAttr.count; i++) {
-                // Read original coordinates (Local space: X, Y is plan, Z is height)
-                const ox = originalPos[i*3];
-                const oy = originalPos[i*3+1];
-                const oz = originalPos[i*3+2]; // The height
-                
-                // Distance from epicenter
-                const dist = Math.sqrt(ox*ox + oy*oy);
-                
-                // Calculate Wave Heights
-                let dz = 0; // Displacement Z
-                
-                // Surface Wave (Rayleigh) - The big rolling one
-                if (state.waves.surf) {
-                    const speed = CONFIG.speeds.SURF;
-                    const wavelength = 20; 
-                    const arrival = dist / speed;
-                    
-                    if (elapsed >= arrival) {
-                        const phase = (dist - elapsed * speed) * (Math.PI*2 / wavelength);
-                        // Gaussian packet
-                        const center = elapsed * speed;
-                        const envelope = Math.exp( -Math.pow(dist - center, 2) / 400 );
-                        
-                        // Attenuation
-                        const atten = 1 / (1 + dist*0.05 + state.depth*0.1);
-                        
-                        dz += Math.sin(phase) * AmpBase * envelope * atten;
-                    }
-                }
-                
-                // Add Noise for P/S (Body waves) - Jitter
-                if (state.waves.p || state.waves.s) {
-                    const pArr = dist / CONFIG.speeds.P;
-                    const sArr = dist / CONFIG.speeds.S;
-                    
-                    if (elapsed > pArr) {
-                        const atten = 1 / (1 + dist*0.1);
-                        const fade = Math.exp(-(elapsed - pArr));
-                        dz += (Math.random()-0.5) * AmpBase * 0.1 * fade * atten;
-                    }
-                }
-                
-                // Apply
-                posAttr.setZ(i, oz + dz);
-            }
-            
-            posAttr.needsUpdate = true;
-            
-            // Update crack visualization based on terrain deformation
-            const crackMesh = scene.getObjectByName('crackmesh');
-            if (crackMesh && elapsed < 15) {
-                const crackIntensity = Math.min(0.4, elapsed / 20);
-                crackMesh.material.opacity = crackIntensity;
-                crackMesh.material.color.setHex(0xef4444);
-            }
-            
-            // 2. Building Physics
-            buildings.forEach(b => {
-                const dist = b.originalPos.distanceTo(epicenter);
-                let shake = new THREE.Vector3();
-                let rock = new THREE.Vector2(); // x/z rotation
-                
-                const atten = 1 / (1 + dist*0.05 + state.depth*0.1);
-                const intensity = AmpBase * atten;
-                
-                // Check arrivals
-                const pTime = dist / CONFIG.speeds.P;
-                const sTime = dist / CONFIG.speeds.S;
-                const surfTime = dist / CONFIG.speeds.SURF;
-                
-                // P-Wave: Push/Pull
-                if (state.waves.p && elapsed > pTime) {
-                    const dir = b.originalPos.clone().normalize();
-                    const force = Math.sin(elapsed * 20) * intensity * 0.2;
-                    shake.add(dir.multiplyScalar(force));
-                }
-                
-                // S-Wave: Shear (Lateral) - Most damaging
-                if (state.waves.s && elapsed > sTime) {
-                    const sFactor = (elapsed - sTime < 5) ? 1 : Math.exp(-(elapsed-sTime-5)*0.5);
-                    
-                    if (state.faultType === 'strike-slip') {
-                        // Horizontal shaking perpendicular to radius roughly, or random
-                        shake.x += (Math.random()-0.5) * intensity * 2 * sFactor;
-                        shake.z += (Math.random()-0.5) * intensity * 2 * sFactor;
-                    } else {
-                        // Vertical/Dip
-                        shake.y += (Math.random()-0.5) * intensity * 2 * sFactor;
-                        shake.x += (Math.random()-0.5) * intensity * 0.5 * sFactor;
-                    }
-                    
-                    // Damage Logic
-                    const accel = shake.length();
-                    if (accel > 0.5) {
-                        b.damage += accel * 0.005; // Accumulate damage
-                    }
-                }
-                
-                // Surface: Rolling
-                if (state.waves.surf && elapsed > surfTime) {
-                    const phase = (dist - elapsed * CONFIG.speeds.SURF) * 0.3;
-                    const roll = Math.sin(phase) * intensity;
-                    shake.y += roll * 2;
-                    rock.x += roll * 0.05 * b.height/10;
-                }
-                
-                // Apply Transform
-                b.mesh.position.copy(b.originalPos).add(shake);
-                b.mesh.rotation.x = b.originalRot.x + rock.y; // Simplified
-                b.mesh.rotation.z = b.originalRot.z + rock.x;
-                
-                // Visual Damage - More dramatic color transition
-                b.damage = Math.min(1, b.damage);
-                if (b.damage > 0) {
-                    // Gradient: Cyan (intact) -> Yellow (moderate) -> Red (critical)
-                    let damageColor;
-                    if (b.damage < 0.3) {
-                        // Cyan to Yellow
-                        const t = b.damage / 0.3;
-                        damageColor = new THREE.Color().setHSL(0.5 - t * 0.15, 0.3 + t * 0.4, 0.5);
-                    } else if (b.damage < 0.7) {
-                        // Yellow to Orange
-                        const t = (b.damage - 0.3) / 0.4;
-                        damageColor = new THREE.Color().setHSL(0.35 - t * 0.1, 0.7 + t * 0.2, 0.5 - t * 0.1);
-                    } else {
-                        // Orange to Red
-                        const t = (b.damage - 0.7) / 0.3;
-                        damageColor = new THREE.Color().setHSL(0.25 * (1 - t), 0.9, 0.3 + t * 0.2);
-                    }
-                    
-                    b.mesh.material.color.copy(damageColor);
-                    b.mesh.material.emissive.copy(damageColor);
-                    b.mesh.material.emissiveIntensity = Math.min(0.8, b.damage * 1.2);
-                    
-                    // Add reactive window illumination based on shaking
-                    if (b.damage > 0) {
-                        const shakeFactor = Math.sin(elapsed * 8 + b.mesh.position.x) * 0.5 + 0.5;
-                        const windowGlow = b.damage * shakeFactor * 0.4;
-                        b.mesh.material.emissiveIntensity += windowGlow;
-                    }
-                    
-                    // Add visual structural deformation
-                    if (b.damage > 0.3) {
-                        b.mesh.scale.y = 1 - (b.damage * 0.15); // Building compresses
-                        b.mesh.scale.x = 1 + (b.damage * 0.08); // Spreads out
-                        b.mesh.scale.z = 1 + (b.damage * 0.08);
-                    }
-
-                    // Add tilt/rotation during collapse for dramatic effect
-                    if (b.damage > 0.5) {
-                        const tilt = (b.damage - 0.5) * 0.3; // Max 15° tilt
-                        b.mesh.rotation.x += tilt * 0.02;
-                        b.mesh.rotation.z += tilt * 0.01;
-                    }
-
-                    // Spawn cracks on building facade
-                    if (b.damage > 0.4 && !b._crackSpawned) {
-                        const sprite = spawnBuildingCrackSprite(b.mesh.position);
-                        sprite.visible = true;
-                        b._crackSpawned = true;
-                    }
-
-                    // Spawn ground crack near building if very damaged
-                    if (b.damage > 0.7 && !b._groundCrack) {
-                        const gpos = b.mesh.position.clone();
-                        gpos.y = 0.02;
-                        spawnGroundCrack(gpos);
-                        b._groundCrack = true;
-                    }
-
-                    // Add smoke particle burst for critical damage
-                    if (b.damage > 0.8 && !b._smokeBurst) {
-                        // spawn a small dense particle burst
-                        spawnParticles(200 + Math.floor(b.damage * 400));
-                        b._smokeBurst = true;
-                    }
-                }
-            });
-
-            // 3. Ring Visuals
-            updateRings(elapsed);
-            
-            // 4. End Check
-            // if (elapsed > 60) reset(); // Optional auto-reset
-        }
-        
-        function updateRings(elapsed) {
-            const types = ['P', 'S', 'SURF'];
-            waveRings.forEach((mesh, i) => {
-                const speed = CONFIG.speeds[types[i]];
-                const r = elapsed * speed;
-                
-                if (r > 200) {
-                    mesh.visible = false;
-                } else {
-                    mesh.visible = true;
-                    mesh.scale.set(r, r, 1);
-                    // Fade out
-                    mesh.material.opacity = Math.max(0, 1 - r/150);
-                }
-            });
-            
-            // Epicenter Pulse
-            epicenterMesh.visible = true;
-            epicenterMesh.material.opacity = Math.max(0, 1 - elapsed/5);
-            epicenterMesh.scale.setScalar(1 + elapsed*5);
-        }
-
-        // --- INTERACTION & UI ---
-    function setupInteractions() {
-            // Mouse/Touch Camera Controls
-            let isDragging = false;
-            let startPos = {x:0, y:0};
-            let camAngle = Math.PI/4, camHeight = 40, camDist = 70;
-            
-            const onDown = (x, y) => { isDragging=true; startPos={x,y}; };
-            const onMove = (x, y) => {
-                if(!isDragging) return;
-                const dx = (x - startPos.x) * 0.005;
-                const dy = (y - startPos.y) * 0.05;
-                
-                camAngle -= dx;
-                camHeight = Math.max(5, Math.min(100, camHeight + dy));
-                
-                camera.position.x = Math.cos(camAngle) * camDist;
-                camera.position.z = Math.sin(camAngle) * camDist;
-                camera.position.y = camHeight;
-                camera.lookAt(0, 0, 0);
-                
-                startPos = {x,y};
+                return amplitudeScale * siteFactor * ampFactor * decay * envelope * Math.sin(18 * freq * localT);
             };
-            const onUp = () => isDragging=false;
 
-            renderer.domElement.addEventListener('mousedown', e => onDown(e.clientX, e.clientY));
-            window.addEventListener('mousemove', e => onMove(e.clientX, e.clientY));
-            window.addEventListener('mouseup', onUp);
-            
-            renderer.domElement.addEventListener('touchstart', e => {
-                onDown(e.touches[0].clientX, e.touches[0].clientY);
-                e.preventDefault(); // Prevent scroll
-            }, {passive:false});
-            window.addEventListener('touchmove', e => {
-                onMove(e.touches[0].clientX, e.touches[0].clientY);
-            }, {passive:false});
-            window.addEventListener('touchend', onUp);
-            
-            // Zoom
-            renderer.domElement.addEventListener('wheel', e => {
-                camDist = Math.max(20, Math.min(150, camDist + e.deltaY * 0.1));
-                camera.position.x = Math.cos(camAngle) * camDist;
-                camera.position.z = Math.sin(camAngle) * camDist;
-                camera.lookAt(0,0,0);
-            });
+            if (quake.waves.p) totalDisp += wave(SEISMIC.P_VELOCITY, 2.5, 0.15);
+            if (quake.waves.s) totalDisp += wave(SEISMIC.S_VELOCITY, 1.5, 0.6);
+            if (quake.waves.surf) totalDisp += wave(SEISMIC.SURF_VELOCITY, 0.8, 1.2);
 
-            // Handle window resize
-            window.addEventListener('resize', () => {
-                const w = window.innerWidth;
-                const h = window.innerHeight;
-                camera.aspect = w / h;
-                camera.updateProjectionMatrix();
-                renderer.setSize(w, h);
-                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            });
+            return {
+                disp: totalDisp,
+                accel: totalDisp * 45.0 
+            };
+        }
 
-            // UI Elements
-            document.getElementById('magnitude').addEventListener('input', e => {
-                state.mag = parseFloat(e.target.value);
-                document.getElementById('magnitude-value').textContent = state.mag.toFixed(1);
-                updateCalculations();
-            });
-            
-            document.getElementById('depth').addEventListener('input', e => {
-                state.depth = parseInt(e.target.value);
-                document.getElementById('depth-value').textContent = state.depth + ' km';
-                updateCalculations();
-            });
+        // ==========================================
+        // 4. SHADER: LIDAR/DEM TERRAIN
+        // ==========================================
+        const LabTerrainShader = {
+            vertex: `
+                uniform float uTime;
+                uniform float uStartTime;
+                uniform vec2 uEpicenter;
+                uniform float uMagnitude;
+                uniform float uDepth;
+                uniform vec3 uWaveParams;
+                uniform vec3 uWaveEnabled;
 
-            document.querySelectorAll('.fault-btn').forEach(btn => {
-                btn.addEventListener('click', e => {
-                    document.querySelectorAll('.fault-btn').forEach(b => {
-                        b.classList.remove('active', 'bg-cyan-900/50', 'text-cyan-300', 'border-cyan-500/50');
-                        b.classList.add('bg-slate-800/50', 'text-slate-400', 'border-slate-700');
-                    });
-                    e.target.classList.remove('bg-slate-800/50', 'text-slate-400', 'border-slate-700');
-                    e.target.classList.add('active', 'bg-cyan-900/50', 'text-cyan-300', 'border-cyan-500/50');
-                    state.faultType = e.target.dataset.type;
+                varying float vDisplacement;
+                varying float vBaseHeight;
+                varying vec2 vUv;
+                varying float vDist;
+                varying vec3 vWorldPos;
+
+                float getWave(float dist, float speed, float freq, float amp) {
+                    float t = uTime - uStartTime;
+                    float arrival = dist / speed;
+                    if (t < arrival) return 0.0;
+                    
+                    float localT = t - arrival;
+                    float scale = pow(10.0, uMagnitude - 5.0) * 0.15;
+                    float envelope = localT * exp(-localT * 2.5);
+                    float decay = exp(-dist * 0.05) / (pow(dist, 0.4) + 1.0);
+                    
+                    return scale * amp * decay * envelope * sin(18.0 * freq * localT);
+                }
+
+                void main() {
+                    vUv = uv;
+                    vec3 pos = position; 
+                    vBaseHeight = pos.y; 
+                    
+                    float dX = pos.x - uEpicenter.x;
+                    float dZ = pos.z - uEpicenter.y;
+                    float dist = sqrt(dX*dX + dZ*dZ + pow(uDepth * 0.2, 2.0));
+                    vDist = dist;
+
+                    float h = 0.0;
+                    if (uStartTime > 0.0) {
+                        if(uWaveEnabled.x > 0.5) h += getWave(dist, uWaveParams.x, 2.5, 0.15);
+                        if(uWaveEnabled.y > 0.5) h += getWave(dist, uWaveParams.y, 1.5, 0.6);
+                        if(uWaveEnabled.z > 0.5) h += getWave(dist, uWaveParams.z, 0.8, 1.2);
+                    }
+
+                    pos.y += h; 
+                    vDisplacement = h;
+                    vWorldPos = (modelMatrix * vec4(pos, 1.0)).xyz;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                }
+            `,
+            fragment: `
+                varying float vDisplacement;
+                varying float vBaseHeight;
+                varying vec2 vUv;
+                varying float vDist;
+                varying vec3 vWorldPos;
+
+                void main() {
+                    // Grid
+                    float gridSize = 60.0;
+                    float gx = abs(fract(vWorldPos.x / 10.0) - 0.5);
+                    float gy = abs(fract(vWorldPos.z / 10.0) - 0.5);
+                    float grid = 1.0 - smoothstep(0.48, 0.5, max(gx, gy));
+                    
+                    // Hypsometric Tint
+                    vec3 colLow = vec3(0.05, 0.1, 0.15);  
+                    vec3 colMid = vec3(0.2, 0.35, 0.25); 
+                    vec3 colHigh = vec3(0.8, 0.8, 0.85); 
+
+                    float heightNorm = smoothstep(0.0, 15.0, vBaseHeight);
+                    vec3 terrainColor = mix(colLow, colMid, smoothstep(0.0, 0.4, heightNorm));
+                    terrainColor = mix(terrainColor, colHigh, smoothstep(0.4, 1.0, heightNorm));
+
+                    vec3 color = mix(terrainColor, vec3(0.5), grid * 0.15);
+
+                    // Wave Vis
+                    float intensity = abs(vDisplacement) * 5.0;
+                    intensity = clamp(intensity, 0.0, 1.0);
+                    
+                    if (intensity > 0.01) {
+                        vec3 waveCol = mix(vec3(0.0, 1.0, 1.0), vec3(1.0, 1.0, 0.0), intensity);
+                        waveCol = mix(waveCol, vec3(1.0, 0.0, 0.0), smoothstep(0.5, 1.0, intensity));
+                        color = mix(color, waveCol, intensity * 0.6);
+                        
+                        float contour = 1.0 - smoothstep(0.4, 0.5, abs(fract(intensity * 5.0) - 0.5));
+                        color += vec3(1.0) * contour * 0.3 * intensity;
+                    }
+
+                    // Epicenter Marker
+                    if (vDist < 1.0) {
+                        color = mix(color, vec3(1.0, 0.2, 0.2), 0.9);
+                    }
+                    
+                    float depth = gl_FragCoord.z / gl_FragCoord.w;
+                    float fogFactor = smoothstep(40.0, 120.0, depth);
+                    color = mix(color, vec3(0.05, 0.06, 0.08), fogFactor);
+
+                    gl_FragColor = vec4(color, 1.0);
+                }
+            `
+        };
+
+        // ==========================================
+        // 5. MAIN SIMULATION CLASS
+        // ==========================================
+
+        class SeismicLab {
+            constructor() {
+                this.time = 0;
+                this.buildings = [];
+                this.raycaster = new THREE.Raycaster();
+                this.pointer = new THREE.Vector2();
+                this.manualEpicenter = null; // Coordinates if set by user
+
+                this.activeQuake = {
+                    active: false,
+                    startTime: -1,
+                    magnitude: 7.0,
+                    depth: 20,
+                    epicenter: { x: 0, y: 0 },
+                    waves: { p: true, s: true, surf: true }
+                };
+
+                this.params = {
+                    magnitude: 7.2,
+                    depth: 15,
+                    pWave: true,
+                    sWave: true,
+                    surfWave: true,
+                    trigger: () => this.triggerQuake(),
+                    reset: () => this.resetScene()
+                };
+
+                this.initEngine();
+                this.initMaterials(); // NEW: Physics Materials
+                this.initWorld();
+                this.initInteraction();
+                this.initUI();
+                
+                this.clock = new THREE.Clock();
+                this.animate();
+            }
+
+            initEngine() {
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                document.getElementById('canvas-container').appendChild(this.renderer.domElement);
+
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x050608);
+
+                this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 500);
+                this.camera.position.set(0, 60, 80);
+                this.camera.lookAt(0, 0, 0);
+
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.05;
+                this.controls.maxPolarAngle = Math.PI / 2 - 0.1;
+
+                this.world = new CANNON.World();
+                this.world.gravity.set(0, -9.82, 0);
+                this.world.broadphase = new CANNON.SAPBroadphase(this.world);
+                this.world.solver.iterations = 10;
+                this.world.solver.tolerance = 0.001;
+                
+                const ambient = new THREE.AmbientLight(0x404040); 
+                this.scene.add(ambient);
+
+                const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+                sun.position.set(50, 80, 30);
+                sun.castShadow = true;
+                sun.shadow.mapSize.set(2048, 2048);
+                sun.shadow.camera.left = -70;
+                sun.shadow.camera.right = 70;
+                sun.shadow.camera.top = 70;
+                sun.shadow.camera.bottom = -70;
+                this.scene.add(sun);
+            }
+
+            initMaterials() {
+                // High friction material to stop "ice sliding"
+                this.concreteMat = new CANNON.Material();
+                this.groundMat = new CANNON.Material();
+                
+                const contactMat = new CANNON.ContactMaterial(this.groundMat, this.concreteMat, {
+                    friction: 0.9,
+                    restitution: 0.1 // Low bounce
                 });
-            });
+                
+                this.world.addContactMaterial(contactMat);
+            }
 
-            // Wave toggle buttons
-            [['wave-p','p'], ['wave-s','s'], ['wave-surf','surf']].forEach(([id, key]) => {
-                const el = document.getElementById(id);
-                if (!el) return;
-                el.addEventListener('click', () => {
-                    state.waves[key] = !state.waves[key];
-                    // Visual feedback
-                    if (state.waves[key]) {
-                        el.classList.remove('opacity-40');
-                        el.classList.add('ring-2');
-                    } else {
-                        el.classList.add('opacity-40');
-                        el.classList.remove('ring-2');
+            initWorld() {
+                const size = CONFIG.resolution;
+                const matrix = [];
+                
+                const planeGeo = new THREE.PlaneGeometry(CONFIG.worldSize, CONFIG.worldSize, size - 1, size - 1);
+                planeGeo.rotateX(-Math.PI / 2);
+
+                const vertices = planeGeo.attributes.position.array;
+                
+                for (let i = 0; i < size; i++) {
+                    matrix.push([]);
+                    for (let j = 0; j < size; j++) {
+                        const x = (i / (size - 1) - 0.5) * CONFIG.worldSize;
+                        const z = (j / (size - 1) - 0.5) * CONFIG.worldSize;
+                        
+                        const h = getTerrainHeight(x, -z); 
+                        matrix[i].push(h);
+                        
+                        const vIndex = (i * size + j) * 3;
+                        vertices[vIndex + 1] = getTerrainHeight(vertices[vIndex], vertices[vIndex + 2]);
+                    }
+                }
+                
+                planeGeo.computeVertexNormals();
+
+                this.terrainUniforms = {
+                    uTime: { value: 0 },
+                    uStartTime: { value: -100 },
+                    uEpicenter: { value: new THREE.Vector2(0, 0) },
+                    uMagnitude: { value: 0 },
+                    uDepth: { value: 0 },
+                    uWaveParams: { value: new THREE.Vector3(SEISMIC.P_VELOCITY, SEISMIC.S_VELOCITY, SEISMIC.SURF_VELOCITY) },
+                    uWaveEnabled: { value: new THREE.Vector3(1, 1, 1) }
+                };
+
+                const planeMat = new THREE.ShaderMaterial({
+                    uniforms: this.terrainUniforms,
+                    vertexShader: LabTerrainShader.vertex,
+                    fragmentShader: LabTerrainShader.fragment,
+                    wireframe: false
+                });
+
+                this.terrain = new THREE.Mesh(planeGeo, planeMat);
+                this.terrain.receiveShadow = true;
+                this.scene.add(this.terrain);
+
+                const hfShape = new CANNON.Heightfield(matrix, {
+                    elementSize: CONFIG.worldSize / (size - 1)
+                });
+                
+                const hfBody = new CANNON.Body({ mass: 0, material: this.groundMat }); 
+                hfBody.addShape(hfShape);
+                hfBody.position.set(-CONFIG.worldSize/2, 0, CONFIG.worldSize/2); 
+                hfBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+                this.world.addBody(hfBody);
+
+                // Target Marker (Hidden by default)
+                const ringGeo = new THREE.RingGeometry(1, 1.5, 32);
+                ringGeo.rotateX(-Math.PI / 2);
+                const ringMat = new THREE.MeshBasicMaterial({ 
+                    color: 0xff3333, 
+                    transparent: true, 
+                    opacity: 0.8,
+                    side: THREE.DoubleSide
+                });
+                this.targetMarker = new THREE.Mesh(ringGeo, ringMat);
+                this.targetMarker.visible = false;
+                this.scene.add(this.targetMarker);
+
+                this.generateCity();
+            }
+
+            generateCity() {
+                this.buildings.forEach(b => {
+                    this.scene.remove(b.mesh);
+                    this.world.removeBody(b.body);
+                });
+                this.buildings = [];
+
+                const baseMat = new THREE.MeshStandardMaterial({
+                    color: 0xe0e0e0,
+                    roughness: 0.8,
+                    metalness: 0.1
+                });
+
+                const blockSize = 8;
+                const range = 40;
+                
+                for(let x = -range; x <= range; x += blockSize) {
+                    for(let z = -range; z <= range; z += blockSize) {
+                        if(Math.random() > 0.85) continue;
+                        if(Math.abs(x) < 5 && Math.abs(z) < 5) continue;
+
+                        const terrainH = getTerrainHeight(x, z);
+                        if (terrainH > 2.0) continue;
+
+                        const w = blockSize * (0.4 + Math.random() * 0.4);
+                        const d = blockSize * (0.4 + Math.random() * 0.4);
+                        const h = 2 + Math.random() * 12; 
+                        
+                        const shape = new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2));
+                        const body = new CANNON.Body({
+                            mass: w * d * h * 5,
+                            position: new CANNON.Vec3(x, terrainH + h/2, z),
+                            linearDamping: 0.05,
+                            angularDamping: 0.1,
+                            material: this.concreteMat
+                        });
+                        body.addShape(shape);
+                        body.allowSleep = true; 
+                        this.world.addBody(body);
+
+                        const geo = new THREE.BoxGeometry(w, h, d);
+                        const mat = baseMat.clone();
+                        const mesh = new THREE.Mesh(geo, mat);
+                        mesh.castShadow = true;
+                        mesh.receiveShadow = true;
+                        
+                        this.scene.add(mesh);
+                        this.buildings.push({ 
+                            mesh, 
+                            body, 
+                            mat, 
+                            initialPos: body.position.clone(), 
+                            initialQuat: body.quaternion.clone() 
+                        });
+                    }
+                }
+            }
+
+            initInteraction() {
+                window.addEventListener('pointerdown', (event) => {
+                    if (event.shiftKey) {
+                        this.pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+                        this.pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+                        this.raycaster.setFromCamera(this.pointer, this.camera);
+                        const intersects = this.raycaster.intersectObject(this.terrain);
+
+                        if (intersects.length > 0) {
+                            const point = intersects[0].point;
+                            this.manualEpicenter = { x: point.x, y: point.z };
+                            
+                            // Move Marker
+                            this.targetMarker.position.set(point.x, point.y + 0.5, point.z);
+                            this.targetMarker.visible = true;
+
+                            // Update UI text
+                            const coordText = `[${point.x.toFixed(1)}, ${point.z.toFixed(1)}]`;
+                            document.getElementById('val-coords').innerText = coordText;
+                            document.getElementById('val-coords').style.color = '#00f0ff';
+                        }
                     }
                 });
-                // Initialize visual state
-                if (!state.waves[key]) el.classList.add('opacity-40');
-            });
-
-            // Trigger
-            document.getElementById('trigger-btn').addEventListener('click', () => {
-                if(state.active) return;
-                state.active = true;
-                state.startTime = clock.getElapsedTime();
-                document.getElementById('sim-status').textContent = "RUPTURE ACTIVE";
-                document.getElementById('sim-status').classList.add('text-red-500', 'pulse-active');
-                
-                // Start audio rumble
-                initAudio();
-                playSeismicRumble(state.mag, 5);
-                
-                // Start recording automatically
-                recordedFrames = [];
-                isRecording = true;
-            });
-
-            // Reset
-            document.getElementById('reset-btn').addEventListener('click', () => {
-                state.active = false;
-                isRecording = false;
-                isPlayingBack = false;
-                
-                // Reset Terrain
-                const pos = terrainMesh.geometry.attributes.position;
-                const orig = terrainMesh.geometry.userData.originalPos;
-                for(let i=0; i<pos.count; i++) pos.setZ(i, orig[i*3+2]);
-                pos.needsUpdate = true;
-                
-                // Reset Buildings
-                buildings.forEach(b => {
-                    b.mesh.position.copy(b.originalPos);
-                    b.mesh.rotation.copy(b.originalRot);
-                    b.damage = 0;
-                    b.mesh.material.color.setHex(CONFIG.colors.building);
-                    b.mesh.material.emissive.setHex(0x000000);
-                });
-                
-                // Reset Rings
-                waveRings.forEach(m => m.visible=false);
-                epicenterMesh.visible = false;
-                
-                // Reset Particles
-                const life = particleGeometry.attributes.life.array;
-                for(let i=0; i<life.length; i++) life[i] = 0;
-                particleGeometry.attributes.life.needsUpdate = true;
-                
-                document.getElementById('sim-status').textContent = "STANDBY";
-                document.getElementById('sim-status').classList.remove('text-red-500', 'pulse-active');
-                
-                // Clear seismograph
-                seismographData.fill(50);
-            });
-            
-            // Recording controls
-            document.getElementById('record-btn').addEventListener('click', () => {
-                if (!state.active) {
-                    recordedFrames = [];
-                    isRecording = true;
-                    document.getElementById('trigger-btn').click(); // Auto-start simulation
-                } else {
-                    isRecording = !isRecording;
-                    document.getElementById('record-btn').style.opacity = isRecording ? '1' : '0.5';
-                }
-            });
-            
-            document.getElementById('play-btn').addEventListener('click', () => {
-                if (recordedFrames.length === 0) return;
-                isPlayingBack = true;
-                playbackIndex = 0;
-                state.active = false;
-                document.getElementById('sim-status').textContent = "PLAYBACK";
-            });
-            
-            document.getElementById('stop-btn').addEventListener('click', () => {
-                isPlayingBack = false;
-                isRecording = false;
-                document.getElementById('reset-btn').click();
-            });
-            
-            document.getElementById('clear-btn').addEventListener('click', () => {
-                recordedFrames = [];
-                document.getElementById('playback-time').textContent = '0.0s';
-            });
-            
-            document.getElementById('timeline-container').addEventListener('click', e => {
-                if (recordedFrames.length === 0) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                const ratio = (e.clientX - rect.left) / rect.width;
-                playbackIndex = Math.floor(ratio * recordedFrames.length);
-            });
-            
-            // Mobile Menu
-            const mobileBtn = document.getElementById('mobile-menu-btn');
-            const mobileMenu = document.getElementById('mobile-menu');
-            const closeMobile = document.getElementById('close-mobile');
-            
-            // Move controls to mobile menu if visible
-            mobileBtn.addEventListener('click', () => {
-                // show overlay
-                mobileMenu.classList.remove('hidden');
-                mobileMenu.classList.add('flex');
-
-                // Clone left sidebar controls into mobile menu if not already cloned (keeps original intact)
-                const controls = document.querySelector('.fixed.left-4 .glass-panel.space-y-6');
-                if (controls && !mobileMenu.querySelector('.glass-panel.space-y-6')) {
-                    const clone = controls.cloneNode(true);
-                    // small label so user knows this is mobile controls
-                    const header = document.createElement('div');
-                    header.className = 'text-xs text-slate-400 mb-3';
-                    header.textContent = 'Mobile Controls';
-                    clone.insertBefore(header, clone.firstChild);
-                    mobileMenu.appendChild(clone);
-                }
-            });
-            
-            closeMobile.addEventListener('click', () => {
-                mobileMenu.classList.add('hidden');
-                mobileMenu.classList.remove('flex');
-                // remove cloned controls to avoid duplicates next open
-                const cloned = mobileMenu.querySelector('.glass-panel.space-y-6');
-                if (cloned) cloned.remove();
-            });
-        }
-
-        function updateCalculations() {
-            // Richter Energy Formula: log E = 4.8 + 1.5M
-            // Joule value roughly
-            const E = Math.pow(10, 4.8 + 1.5 * state.mag);
-            let eStr = "";
-            if(E > 1e15) eStr = (E/1e15).toFixed(1) + " PJ";
-            else if (E > 1e12) eStr = (E/1e12).toFixed(1) + " TJ";
-            else if (E > 1e9) eStr = (E/1e9).toFixed(1) + " GJ";
-            else eStr = (E/1e6).toFixed(1) + " MJ";
-            
-            document.getElementById('energy-val').textContent = eStr;
-            
-            // Peak Ground Acceleration (Approx)
-            const pga = Math.pow(10, -1.2 + 0.3*state.mag - 0.002*state.depth);
-            document.getElementById('pga-val').textContent = pga.toFixed(3);
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            const delta = clock.getDelta();
-            
-            // Handle playback
-            if (isPlayingBack && recordedFrames.length > 0) {
-                const frame = recordedFrames[playbackIndex];
-                if (frame) {
-                    // Restore recorded state
-                    state.mag = frame.mag;
-                    state.depth = frame.depth;
-                    // Update UI would go here
-                }
-                playbackIndex++;
-                if (playbackIndex >= recordedFrames.length) {
-                    isPlayingBack = false;
-                }
-                document.getElementById('playback-time').textContent = (playbackIndex * 0.016).toFixed(1) + 's';
-                const progress = (playbackIndex / recordedFrames.length) * 100;
-                document.getElementById('timeline-progress').style.width = progress + '%';
             }
-            
-            // Record frame if active
-            if (isRecording && state.active) {
-                recordedFrames.push({
-                    mag: state.mag,
-                    depth: state.depth,
-                    time: clock.getElapsedTime() - state.startTime
+
+            initUI() {
+                const pane = new Pane({ title: 'Simulation Control' });
+                
+                const f1 = pane.addFolder({ title: 'Seismic Source' });
+                f1.addBinding(this.params, 'magnitude', { min: 4.0, max: 9.0, step: 0.1 });
+                f1.addBinding(this.params, 'depth', { min: 0, max: 50 });
+                
+                const f2 = pane.addFolder({ title: 'Phase Filters' });
+                f2.addBinding(this.params, 'pWave', { label: 'P-Wave' });
+                f2.addBinding(this.params, 'sWave', { label: 'S-Wave' });
+                f2.addBinding(this.params, 'surfWave', { label: 'Surface (R)' });
+
+                pane.addBlade({ view: 'separator' });
+                pane.addButton({ title: 'INITIATE EVENT', label: 'Trigger' }).on('click', this.params.trigger);
+                pane.addButton({ title: 'RESET SCENE', label: 'System' }).on('click', this.params.reset);
+
+                this.seismoCanvas = document.getElementById('seismograph');
+                this.seismoCtx = this.seismoCanvas.getContext('2d');
+                this.seismoData = new Array(this.seismoCanvas.width).fill(0);
+            }
+
+            triggerQuake() {
+                let ex, ey;
+
+                if (this.manualEpicenter) {
+                    ex = this.manualEpicenter.x;
+                    ey = this.manualEpicenter.y;
+                } else {
+                    // Random if no target set
+                    ex = (Math.random() - 0.5) * 40;
+                    ey = (Math.random() - 0.5) * 40;
+                }
+                
+                this.activeQuake = {
+                    active: true,
+                    startTime: this.time,
+                    magnitude: this.params.magnitude,
+                    depth: this.params.depth,
+                    epicenter: { x: ex, y: ey },
+                    waves: {
+                        p: this.params.pWave,
+                        s: this.params.sWave,
+                        surf: this.params.surfWave
+                    }
+                };
+
+                this.buildings.forEach(b => b.body.wakeUp());
+
+                this.terrainUniforms.uStartTime.value = this.activeQuake.startTime;
+                this.terrainUniforms.uEpicenter.value.set(this.activeQuake.epicenter.x, this.activeQuake.epicenter.y);
+                this.terrainUniforms.uMagnitude.value = this.activeQuake.magnitude;
+                this.terrainUniforms.uDepth.value = this.activeQuake.depth;
+                this.terrainUniforms.uWaveEnabled.value.set(
+                    this.params.pWave ? 1 : 0, 
+                    this.params.sWave ? 1 : 0, 
+                    this.params.surfWave ? 1 : 0
+                );
+
+                const status = document.getElementById('quake-status');
+                status.classList.add('warning');
+                status.innerText = "SEISMIC EVENT: ACTIVE";
+                document.getElementById('val-mag').innerText = this.activeQuake.magnitude.toFixed(1) + " Mw";
+                document.getElementById('val-depth').innerText = this.activeQuake.depth.toFixed(1) + " km";
+            }
+
+            resetScene() {
+                this.activeQuake.active = false;
+                this.terrainUniforms.uStartTime.value = -999;
+                
+                const status = document.getElementById('quake-status');
+                status.classList.remove('warning');
+                status.innerText = "SEISMIC STATUS: IDLE";
+                
+                document.getElementById('val-pga').innerText = "0.00 g";
+                document.getElementById('val-pga').className = "value";
+
+                const baseCol = new THREE.Color(0xe0e0e0);
+                this.buildings.forEach(b => {
+                    b.body.position.copy(b.initialPos);
+                    b.body.quaternion.copy(b.initialQuat);
+                    b.body.velocity.set(0,0,0);
+                    b.body.angularVelocity.set(0,0,0);
+                    b.body.sleep();
+                    b.mat.color.copy(baseCol);
                 });
             }
-            
-            updatePhysics(delta);
-            updateParticles();
-            updateSeismograph();
-            updateStats();
-            updateTime();
-            updateFPS();
-            
-            if (composer) composer.render();
-            else renderer.render(scene, camera);
-        }
-        
-        function updateFPS() {
-            const newFps = Math.round(1 / (clock.getDelta() || 0.016));
-            fps = fps * fpsSmoothing + newFps * (1 - fpsSmoothing);
-            document.getElementById('fps-counter').textContent = Math.round(fps) + ' FPS';
-        }
-        
-        function updateSeismograph() {
-            let val = 50;
-            if (state.active) {
-                // Synthetic noise based on active magnitude
-                const elapsed = clock.getElapsedTime() - state.startTime;
-                // Simple envelope
-                const env = Math.max(0, (elapsed * Math.exp(-elapsed*0.1)) * 0.5);
-                val += (Math.random()-0.5) * state.mag * 5 * env;
-                
-                // Add visible wave arrivals on seismograph
-                const pArrival = state.depth / CONFIG.speeds.P;
-                const sArrival = state.depth / CONFIG.speeds.S;
-                const surfArrival = state.depth / CONFIG.speeds.SURF;
-                
-                // P-wave accent (subtle cyan peak)
-                if (elapsed > pArrival && elapsed < pArrival + 0.5) {
-                    val += Math.sin((elapsed - pArrival) * Math.PI / 0.5) * state.mag * 2;
+
+            updatePhysics() {
+                this.world.fixedStep();
+
+                if (this.activeQuake.active) {
+                    let peakAccel = 0;
+                    
+                    const colSafe = new THREE.Color(0xe0e0e0);
+                    const colWarn = new THREE.Color(0xffcc00);
+                    const colDanger = new THREE.Color(0xff3333);
+
+                    this.buildings.forEach(b => {
+                        const res = calculateGroundMotion(
+                            b.body.position.x, 
+                            b.body.position.z, 
+                            b.initialPos.y, 
+                            this.time, 
+                            this.activeQuake
+                        );
+
+                        const absAccel = Math.abs(res.accel);
+                        if (absAccel > peakAccel) peakAccel = absAccel;
+
+                        // NEW PHYSICS: Directional forces
+                        if (absAccel > 0.05) {
+                            // Calculate Direction Vector from Epicenter
+                            const dx = b.body.position.x - this.activeQuake.epicenter.x;
+                            const dz = b.body.position.z - this.activeQuake.epicenter.y;
+                            const dist = Math.sqrt(dx*dx + dz*dz) + 0.001; // Avoid div0
+                            
+                            // Normal Vectors
+                            const nx = dx / dist;
+                            const nz = dz / dist;
+
+                            // Radial Force (Push/Pull away from epicenter) - P-wave & Surface
+                            const fRadial = res.accel * b.body.mass * 0.6;
+                            
+                            // Transverse Force (Shear perpendicular to direction) - S-wave
+                            // Simple shear: (-nz, nx)
+                            const fShear = res.accel * b.body.mass * 0.3 * Math.sin(this.time * 10); 
+
+                            // Vertical Force (Kick)
+                            const fVert = res.accel * b.body.mass * 0.8;
+
+                            // Combine
+                            const fx = (nx * fRadial) + (-nz * fShear);
+                            const fz = (nz * fRadial) + (nx * fShear);
+
+                            // Apply at Center of Mass (High Friction prevents sliding, causing tipping)
+                            b.body.applyForce(new CANNON.Vec3(fx, fVert, fz));
+                        }
+
+                        // Stress Visual
+                        const stress = Math.min(absAccel / 8.0, 1.0); 
+                        
+                        if (stress < 0.05) {
+                            b.mat.color.lerp(colSafe, 0.1);
+                        } else if (stress < 0.4) {
+                            b.mat.color.lerp(colWarn, 0.2);
+                        } else {
+                            b.mat.color.lerp(colDanger, 0.3);
+                        }
+
+                        b.mesh.position.copy(b.body.position);
+                        b.mesh.quaternion.copy(b.body.quaternion);
+                    });
+
+                    const pgaG = peakAccel / 9.8; 
+                    const elPga = document.getElementById('val-pga');
+                    elPga.innerText = pgaG.toFixed(2) + " g";
+                    
+                    if(pgaG > 0.5) elPga.className = "value alert";
+                    else if (pgaG > 0.1) elPga.className = "value warn";
+                    else elPga.className = "value";
                 }
+            }
+
+            updateSeismograph() {
+                this.seismoData.shift();
+                // Measure at (0,0) with y=0 (Basin)
+                const sample = calculateGroundMotion(0, 0, 0, this.time, this.activeQuake);
+                this.seismoData.push(sample.disp);
+
+                const ctx = this.seismoCtx;
+                const w = this.seismoCanvas.width;
+                const h = this.seismoCanvas.height;
+
+                ctx.clearRect(0, 0, w, h);
+                ctx.beginPath();
+                ctx.strokeStyle = '#00f0ff'; 
+                ctx.lineWidth = 1.5;
+
+                for (let i = 0; i < w; i++) {
+                    const val = this.seismoData[i] * 40; 
+                    const y = (h / 2) - val;
+                    if (i === 0) ctx.moveTo(i, y);
+                    else ctx.lineTo(i, y);
+                }
+                ctx.stroke();
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
                 
-                // S-wave accent (bigger yellow peak)
-                if (elapsed > sArrival && elapsed < sArrival + 1.0) {
-                    val += Math.sin((elapsed - sArrival) * Math.PI / 1.0) * state.mag * 4;
-                }
-                
-                // Surface wave (sustained rolling motion)
-                if (elapsed > surfArrival && elapsed < surfArrival + 2.0) {
-                    val += Math.sin((elapsed - surfArrival) * Math.PI / 2.0) * state.mag * 3;
-                }
-            } else {
-                val += (Math.random()-0.5) * 2; // Microseisms
+                const dt = this.clock.getDelta();
+                this.time += dt;
+
+                this.terrainUniforms.uTime.value = this.time;
+                this.updatePhysics();
+                this.updateSeismograph();
+                this.controls.update();
+                this.renderer.render(this.scene, this.camera);
             }
-            
-            val = Math.max(0, Math.min(100, val));
-            seismographData.push(val);
-            seismographData.shift();
-            
-            const points = seismographData.map((v, i) => `${i},${v}`).join(' ');
-            document.getElementById('seismo-line').setAttribute('points', points);
-            
-            // Dynamic color based on amplitude
-            const amplitude = Math.max(...seismographData) - Math.min(...seismographData);
-            if (state.active) {
-                if (amplitude > 30) {
-                    document.getElementById('seismo-line').style.stroke = '#fbbf24';  // Yellow
-                    document.getElementById('seismo-line').style.strokeWidth = '2.5';
-                } else if (amplitude > 15) {
-                    document.getElementById('seismo-line').style.stroke = '#ef4444';  // Red
-                    document.getElementById('seismo-line').style.strokeWidth = '2';
-                } else {
-                    document.getElementById('seismo-line').style.stroke = '#3b82f6';  // Blue
-                    document.getElementById('seismo-line').style.strokeWidth = '1.5';
-                }
-            } else {
-                document.getElementById('seismo-line').style.stroke = '#38bdf8';
-                document.getElementById('seismo-line').style.strokeWidth = '1.5';
-            }
-        }
-        
-        function updateStats() {
-            // Damage %
-            let totalDmg = 0;
-            let intact=0, minor=0, critical=0;
-            
-            buildings.forEach(b => {
-                totalDmg += b.damage;
-                if(b.damage < 0.1) intact++;
-                else if(b.damage < 0.6) minor++;
-                else critical++;
-            });
-            
-            const avgDmg = Math.round((totalDmg / buildings.length) * 100);
-            document.getElementById('damage-pct').textContent = avgDmg + '%';
-            
-            // Update Ring SVG dashoffset (circumference ~ 175)
-            const offset = 175 - (175 * (avgDmg/100));
-            document.getElementById('damage-ring').style.strokeDashoffset = offset;
-            
-            document.getElementById('count-intact').textContent = intact;
-            document.getElementById('count-minor').textContent = minor;
-            document.getElementById('count-critical').textContent = critical;
-            
-            // Update Intensity Heatmap
-            const pga = Math.pow(10, -1.2 + 0.3*state.mag - 0.002*state.depth);
-            const intensity = calculateIntensity(pga);
-            document.getElementById('heatmap-pga').textContent = pga.toFixed(3) + ' g';
-            document.getElementById('heatmap-intensity').textContent = intensity.label;
-            
-            // Heatmap visual feedback
-            const heatmapBar = document.querySelector('.heatmap-bar');
-            heatmapBar.style.opacity = Math.min(1, pga * 2);
-            
-            // Pulse the heatmap during active quakes
-            if (state.active && pga > 0.01) {
-                heatmapBar.classList.add('active-quake');
-            } else {
-                heatmapBar.classList.remove('active-quake');
-            }
-        }
-        
-        function calculateIntensity(pga) {
-            const intensities = [
-                { min: 0, max: 0.0017, label: 'I (Not felt)', color: '#1e40af' },
-                { min: 0.0017, max: 0.014, label: 'II (Weak)', color: '#0ea5e9' },
-                { min: 0.014, max: 0.039, label: 'III (Weak)', color: '#10b981' },
-                { min: 0.039, max: 0.092, label: 'IV (Light)', color: '#eab308' },
-                { min: 0.092, max: 0.18, label: 'V (Moderate)', color: '#f97316' },
-                { min: 0.18, max: 0.34, label: 'VI (Strong)', color: '#dc2626' },
-                { min: 0.34, max: 0.65, label: 'VII (Very Strong)', color: '#800000' },
-                { min: 0.65, max: 1.24, label: 'VIII (Severe)', color: '#4a0000' },
-                { min: 1.24, max: 2.5, label: 'IX (Violent)', color: '#1a0000' },
-                { min: 2.5, max: Infinity, label: 'X (Extreme)', color: '#000000' }
-            ];
-            
-            for (let int of intensities) {
-                if (pga >= int.min && pga < int.max) return int;
-            }
-            return intensities[0];
         }
 
-        function updateTime() {
-            const now = new Date();
-            document.getElementById('current-time').textContent = now.toISOString().split('T')[1].split('.')[0];
-        }
+        window.onload = () => { window.app = new SeismicLab(); };
 
-        // --- BOOTSTRAP ---
-        init();
+        window.addEventListener('resize', () => {
+            if (window.app) {
+                window.app.camera.aspect = window.innerWidth / window.innerHeight;
+                window.app.camera.updateProjectionMatrix();
+                window.app.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
 
     </script>
 </body>
