@@ -19,6 +19,7 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
   const [userNotes, setUserNotes] = useState('');
   const [previewImage, setPreviewImage] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const [{ status: aiStatus, payload: aiPayload, error: aiError }, setAiState] =
     useState(initialAiState);
   const abortControllerRef = useRef(null);
@@ -64,6 +65,7 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
     if (!previewImage || !firestore) {
       return;
     }
+    setSaveError(null);
     setIsSaving(true);
 
     try {
@@ -75,8 +77,9 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
         createdAt: Timestamp.now(),
       });
       onClose();
-    } catch (saveError) {
-      console.error('Failed to save health log', saveError);
+    } catch (error) {
+      console.error('Failed to save health log', error);
+      setSaveError(error);
     } finally {
       setIsSaving(false);
     }
@@ -159,6 +162,12 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
               </div>
             </div>
           </div>
+        )}
+
+        {saveError && (
+          <p className="text-sm text-red-600">
+            Unable to save this log. Please try again.
+          </p>
         )}
 
         <div className="flex justify-end gap-3 pt-4">
