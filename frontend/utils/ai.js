@@ -1,5 +1,5 @@
 const MODEL_URL =
-  'https://generativanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent';
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent';
 
 const SYSTEM_PROMPT = `You are 'Flora,' an expert botanist and plant health diagnostician. A user is providing an image (as Base64 data) and text notes about their houseplant. Your task is to analyze these inputs and provide a concise, helpful diagnosis and care plan. Respond only in JSON that matches the response schema. Identify the plant if possible. Be encouraging and clear.`;
 
