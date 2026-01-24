@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bitcoin Outlook Dashboard</title>
+    <meta
+      name="description"
+      content="Interactive Bitcoin outlook dashboard with simulated intraday analytics."
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              display: ["Inter", "ui-sans-serif", "system-ui"],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      body {
+        min-height: 100vh;
+        background: radial-gradient(circle at top left, rgba(30, 64, 175, 0.25), transparent 55%),
+          radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.18), transparent 50%),
+          #020617;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      ::selection {
+        background-color: rgba(74, 222, 128, 0.35);
+        color: #0f172a;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-950 text-slate-100">
+    <div id="root" class="mx-auto max-w-6xl px-4 py-10"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+
+    <script type="text/babel" data-presets="env,react">
+      const { useMemo, useState, useEffect, useCallback } = React;
+      const {
+        ResponsiveContainer,
+        LineChart,
+        Line,
+        CartesianGrid,
+        XAxis,
+        YAxis,
+        Tooltip,
+        ReferenceLine,
+        ReferenceArea,
+        ReferenceDot,
+        Area,
+      } = Recharts;
+
+      const RESISTANCE = 117500;
+      const SUPPORT = 115500;
+      const DANGER_LINE = 114200;
+
+      const TIMEFRAME_CONFIGS = {
+        "12h": {
+          label: "Last 12 Hours",
+          description: "London \u2192 New York overlap focus.",
+          targets: { bull: 119500, bear: 113200 },
+          yDomain: [113500, 119700],
+          data: [
+            { time: "-12h", price: 114900 },
+            { time: "-10h", price: 115500 },
+            { time: "-8h", price: 116200 },
+            { time: "-6h", price: 115800 },
+            { time: "-4h", price: 116400 },
+            { time: "-2h", price: 116800 },
+            { time: "Now", price: 116841 },
+          ],
+        },
+        "24h": {
+          label: "Last 24 Hours",
+          description: "Full session rotation with Asia context.",
+          targets: { bull: 120200, bear: 112000 },
+          yDomain: [111500, 120500],
+          data: [
+            { time: "-24h", price: 112700 },
+            { time: "-22h", price: 113150 },
+            { time: "-20h", price: 114050 },
+            { time: "-18h", price: 113600 },
+            { time: "-16h", price: 114300 },
+            { time: "-14h", price: 114850 },
+            { time: "-12h", price: 114900 },
+            { time: "-10h", price: 115500 },
+            { time: "-8h", price: 116200 },
+            { time: "-6h", price: 115800 },
+            { time: "-4h", price: 116400 },
+            { time: "-2h", price: 116800 },
+            { time: "Now", price: 116841 },
+          ],
+        },
+        "3d": {
+          label: "Last 3 Days",
+          description: "Broader structure across recent swings.",
+          targets: { bull: 121800, bear: 110800 },
+          yDomain: [110000, 121800],
+          data: [
+            { time: "-72h", price: 111800 },
+            { time: "-60h", price: 112450 },
+            { time: "-48h", price: 114100 },
+            { time: "-36h", price: 113050 },
+            { time: "-30h", price: 112600 },
+            { time: "-24h", price: 112700 },
+            { time: "-18h", price: 113600 },
+            { time: "-12h", price: 114900 },
+            { time: "-6h", price: 115800 },
+            { time: "Now", price: 116841 },
+          ],
+        },
+      };
+
+      const formatCurrency = (value) => {
+        if (!Number.isFinite(value)) return "$0";
+        return `$${Math.round(value).toLocaleString("en-US")}`;
+      };
+
+      const formatChange = (value) => {
+        if (!Number.isFinite(value)) return "$0";
+        const sign = value >= 0 ? "+" : "−";
+        return `${sign}$${Math.abs(Math.round(value)).toLocaleString("en-US")}`;
+      };
+
+      const formatPercent = (value, withSign = true, digits = 2) => {
+        if (!Number.isFinite(value)) return withSign ? "+0.00%" : "0.00%";
+        const abs = Math.abs(value).toFixed(digits);
+        if (!withSign) return `${abs}%`;
+        return `${value >= 0 ? "+" : "−"}${abs}%`;
+      };
+
+      const enhanceData = (points) =>
+        points.map((point, index) => {
+          const previous = points[index - 1];
+          return {
+            ...point,
+            changeFromPrev: index === 0 ? 0 : point.price - previous.price,
+          };
+        });
+
+      function CustomTooltip({ active, payload, label, onValueChange = () => {} }) {
+        const value = active && payload && payload.length ? payload[0].value : null;
+
+        useEffect(() => {
+          onValueChange(value);
+        }, [value, onValueChange]);
+
+        if (!active || !payload || !payload.length) {
+          return null;
+        }
+
+        const datum = payload[0].payload;
+        return (
+          <div className="rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 shadow-xl">
+            <p className="text-xs uppercase tracking-wider text-slate-400">{label}</p>
+            <p className="text-lg font-semibold text-emerald-300">
+              {formatCurrency(datum.price)}
+            </p>
+            <p
+              className={`text-sm ${
+                datum.changeFromPrev >= 0 ? "text-emerald-400" : "text-rose-400"
+              }`}
+            >
+              {datum.changeFromPrev >= 0 ? "▲" : "▼"} {formatChange(datum.changeFromPrev)} vs. prior interval
+            </p>
+          </div>
+        );
+      }
+
+      const ScenarioBadge = ({ tone, children }) => (
+        <span
+          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${tone}`}
+        >
+          {children}
+        </span>
+      );
+
+      function BTC12hAnalysis() {
+        const [timeframe, setTimeframe] = useState("12h");
+        const [tooltipHighlight, setTooltipHighlight] = useState(null);
+        const [countdown, setCountdown] = useState(30);
+
+        const config = TIMEFRAME_CONFIGS[timeframe] ?? TIMEFRAME_CONFIGS["12h"];
+
+        useEffect(() => {
+          setTooltipHighlight(null);
+        }, [timeframe]);
+
+        useEffect(() => {
+          const timer = setInterval(() => {
+            setCountdown((value) => {
+              if (value <= 1) return 30;
+              return value - 1;
+            });
+          }, 1000);
+          return () => clearInterval(timer);
+        }, []);
+
+        const processedData = useMemo(() => enhanceData(config.data), [config]);
+
+        const metrics = useMemo(() => {
+          if (!processedData.length) {
+            return {
+              currentPrice: 0,
+              startPrice: 0,
+              priceChange: 0,
+              priceChangePct: 0,
+              sessionHigh: 0,
+              sessionLow: 0,
+              averagePrice: 0,
+              range: 0,
+              rangePct: 0,
+              lastChange: 0,
+              prevChange: 0,
+              volatilityFactor: 0,
+              momentumScore: 50,
+            };
+          }
+
+          const prices = processedData.map((point) => point.price);
+          const currentPrice = prices[prices.length - 1];
+          const startPrice = prices[0];
+          const sessionHigh = Math.max(...prices);
+          const sessionLow = Math.min(...prices);
+          const averagePrice = Math.round(prices.reduce((sum, value) => sum + value, 0) / prices.length);
+          const priceChange = currentPrice - startPrice;
+          const priceChangePct = startPrice ? (priceChange / startPrice) * 100 : 0;
+          const range = sessionHigh - sessionLow;
+          const rangePct = startPrice ? (range / startPrice) * 100 : 0;
+          const lastChange = processedData[processedData.length - 1].changeFromPrev ?? 0;
+          const prevChange = processedData.length > 1 ? processedData[processedData.length - 2].changeFromPrev ?? 0 : 0;
+          const volatilityFactor = rangePct;
+          const momentumRaw =
+            55 +
+            priceChangePct * 4 +
+            (lastChange / 20) * 8 -
+            Math.max(0, (volatilityFactor - 1.4) * 3);
+          const momentumScore = Math.max(0, Math.min(100, Math.round(momentumRaw)));
+
+          return {
+            currentPrice,
+            startPrice,
+            priceChange,
+            priceChangePct,
+            sessionHigh,
+            sessionLow,
+            averagePrice,
+            range,
+            rangePct,
+            lastChange,
+            prevChange,
+            volatilityFactor,
+            momentumScore,
+          };
+        }, [processedData]);
+
+        const qualitativeTrend = useMemo(() => {
+          if (!metrics.currentPrice) {
+            return {
+              label: "Awaiting Data",
+              summary: "Dashboard initialising feed.",
+              colorClass: "text-slate-300",
+              badgeClass: "border border-slate-700 bg-slate-900/60",
+            };
+          }
+
+          if (metrics.momentumScore >= 72) {
+            return {
+              label: "Strongly Bullish",
+              summary: "Buyers dominate structure; watch for breakout continuation.",
+              colorClass: "text-emerald-300",
+              badgeClass: "border border-emerald-500/40 bg-emerald-500/10",
+            };
+          }
+
+          if (metrics.momentumScore >= 55) {
+            return {
+              label: "Constructive Bias",
+              summary: "Higher lows building \u2013 acceptance needed above resistance.",
+              colorClass: "text-sky-300",
+              badgeClass: "border border-sky-500/40 bg-sky-500/10",
+            };
+          }
+
+          if (metrics.momentumScore <= 35) {
+            return {
+              label: "High Risk",
+              summary: "Selling pressure elevated; protect against liquidity sweeps.",
+              colorClass: "text-rose-300",
+              badgeClass: "border border-rose-500/40 bg-rose-500/10",
+            };
+          }
+
+          return {
+            label: "Neutral Range",
+            summary: "Two-sided auction; wait for a decisive resolution.",
+            colorClass: "text-amber-300",
+            badgeClass: "border border-amber-500/40 bg-amber-500/10",
+          };
+        }, [metrics.currentPrice, metrics.momentumScore]);
+
+        const keyLevels = useMemo(() => {
+          const sessionLevel = {
+            id: "sessionLow",
+            label: `Session Low ${formatCurrency(metrics.sessionLow)}`,
+            price: metrics.sessionLow,
+            accent: "text-amber-300",
+            chartLabel: `Session Low ${formatCurrency(metrics.sessionLow)}`,
+          };
+
+          return [
+            {
+              id: "resistance",
+              label: "Major Resistance",
+              price: RESISTANCE,
+              accent: "text-rose-400",
+              chartLabel: "Resistance $117.5k",
+            },
+            {
+              id: "support",
+              label: "Primary Support",
+              price: SUPPORT,
+              accent: "text-sky-400",
+              chartLabel: "Support $115.5k",
+            },
+            sessionLevel,
+            {
+              id: "danger",
+              label: "Danger Line",
+              price: DANGER_LINE,
+              accent: "text-rose-500",
+              chartLabel: "Danger Line $114.2k",
+            },
+          ];
+        }, [metrics.sessionLow]);
+
+        const nearestLevel = useMemo(() => {
+          if (!keyLevels.length || !metrics.currentPrice) return null;
+          return keyLevels.reduce(
+            (closest, level) => {
+              const distance = Math.abs(level.price - metrics.currentPrice);
+              if (distance < closest.distance) {
+                return { level, distance };
+              }
+              return closest;
+            },
+            { level: keyLevels[0], distance: Infinity }
+          );
+        }, [keyLevels, metrics.currentPrice]);
+
+        const activeHighlight = tooltipHighlight ?? (nearestLevel ? nearestLevel.level.id : null);
+
+        const handleTooltipValueChange = useCallback(
+          (value) => {
+            if (typeof value !== "number") {
+              setTooltipHighlight(null);
+              return;
+            }
+            const closest = keyLevels.reduce(
+              (result, level) => {
+                const distance = Math.abs(level.price - value);
+                if (distance < result.distance) {
+                  return { id: level.id, distance };
+                }
+                return result;
+              },
+              { id: null, distance: Infinity }
+            );
+            setTooltipHighlight(closest.id);
+          },
+          [keyLevels]
+        );
+
+        const yDomain = useMemo(() => {
+          if (config.yDomain) return config.yDomain;
+          if (!metrics.sessionLow || !metrics.sessionHigh) {
+            return [112000, 120000];
+          }
+          const padding = 400;
+          return [Math.max(0, metrics.sessionLow - padding), metrics.sessionHigh + padding];
+        }, [config, metrics.sessionLow, metrics.sessionHigh]);
+
+        const analysisBullets = useMemo(() => {
+          if (!processedData.length) return [];
+          const lastPoint = processedData[processedData.length - 1];
+          const previousPoint = processedData.length > 1 ? processedData[processedData.length - 2] : null;
+          const acceleration = previousPoint ? lastPoint.changeFromPrev - (previousPoint.changeFromPrev ?? 0) : 0;
+
+          const summary = [`${qualitativeTrend.label}: ${qualitativeTrend.summary}`];
+          summary.push(
+            `Net change ${formatChange(metrics.priceChange)} (${formatPercent(metrics.priceChangePct)}) from window open.`
+          );
+
+          if (nearestLevel) {
+            const direction = metrics.currentPrice >= nearestLevel.level.price ? "above" : "below";
+            const difference = nearestLevel.level.price - metrics.currentPrice;
+            summary.push(
+              `Nearest key level: ${nearestLevel.level.label} at ${formatCurrency(nearestLevel.level.price)} (${formatChange(difference)} ${direction}).`
+            );
+          }
+
+          summary.push(
+            `Range ${formatCurrency(metrics.sessionLow)} \u2013 ${formatCurrency(metrics.sessionHigh)} (${formatPercent(
+              metrics.rangePct,
+              false
+            )}) showing ${metrics.rangePct > 1.6 ? "elevated" : "contained"} volatility.`
+          );
+
+          summary.push(
+            `Momentum delta ${formatChange(lastPoint.changeFromPrev)} vs. ${formatChange(previousPoint?.changeFromPrev ?? 0)} prior (acceleration ${formatChange(acceleration)}).`
+          );
+
+          return summary;
+        }, [processedData, metrics, qualitativeTrend, nearestLevel]);
+
+        const scenarioCards = useMemo(() => {
+          const breakoutBias = metrics.momentumScore >= 65 ? "Favorable" : metrics.momentumScore >= 50 ? "Moderate" : "Low";
+          const fadeBias = metrics.momentumScore <= 40 ? "Favorable" : metrics.momentumScore <= 55 ? "Moderate" : "Low";
+          return [
+            {
+              id: "bullish",
+              title: "Bullish Continuation",
+              tone: "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
+              badgeTone: "bg-emerald-500/20 text-emerald-900",
+              probability: breakoutBias,
+              bullets: [
+                `Acceptance above ${formatCurrency(RESISTANCE)} unlocks ${formatCurrency(config.targets.bull)} objective zone.`,
+                `Momentum score ${metrics.momentumScore} suggests buyers ${breakoutBias === "Favorable" ? "control intraday flow" : "still have work to do"}.`,
+                `Look for sustained bids while price holds ${formatCurrency(SUPPORT)} or higher on pullbacks.`,
+              ],
+            },
+            {
+              id: "bearish",
+              title: "Bearish Scenario",
+              tone: "border border-rose-500/40 bg-rose-500/10 text-rose-200",
+              badgeTone: "bg-rose-500/20 text-rose-900",
+              probability: fadeBias,
+              bullets: [
+                `Failure to defend ${formatCurrency(SUPPORT)} reopens ${formatCurrency(metrics.sessionLow)} liquidity pocket.`,
+                `Break of ${formatCurrency(metrics.sessionLow)} exposes ${formatCurrency(config.targets.bear)} demand zone.`,
+                `Momentum cooling with last move ${formatChange(metrics.lastChange)} \u2013 monitor seller follow-through.`,
+              ],
+            },
+          ];
+        }, [config, metrics]);
+
+        const latestPoint = processedData[processedData.length - 1];
+
+        return (
+          <div className="space-y-8">
+            <header className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-200">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true"></span>
+                  Live outlook (simulated)
+                </div>
+                <h1 className="text-3xl font-semibold text-white md:text-4xl">
+                  Bitcoin Multi-Window Outlook
+                </h1>
+                <p className="max-w-2xl text-sm text-slate-300 md:text-base">
+                  A curated snapshot of Bitcoin price structure using mock data. Switch between time windows to compare momentum, volatility, and key levels before acting on a plan.
+                </p>
+              </div>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+                <div className={`rounded-2xl px-4 py-3 text-right shadow ${qualitativeTrend.badgeClass}`}>
+                  <p className="text-xs uppercase tracking-widest text-slate-400">Bias</p>
+                  <p className={`text-lg font-semibold ${qualitativeTrend.colorClass}`}>
+                    {qualitativeTrend.label}
+                  </p>
+                  <p className="text-xs text-slate-300">{qualitativeTrend.summary}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-right shadow">
+                  <p className="text-xs uppercase tracking-widest text-slate-400">Next refresh</p>
+                  <p className="text-lg font-semibold text-white">{countdown}s</p>
+                  <p className="text-xs text-slate-500">Auto-reset mock feed</p>
+                </div>
+              </div>
+            </header>
+
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(TIMEFRAME_CONFIGS).map(([key, value]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setTimeframe(key)}
+                    className={`rounded-full px-4 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                      timeframe === key
+                        ? "bg-emerald-400 text-emerald-950 shadow-lg shadow-emerald-500/30 focus-visible:outline-emerald-200"
+                        : "bg-slate-800/70 text-slate-300 hover:bg-slate-700/80 focus-visible:outline-emerald-300"
+                    }`}
+                  >
+                    {value.label}
+                  </button>
+                ))}
+              </div>
+              <div className="text-sm text-slate-400">
+                Viewing window: <span className="font-semibold text-slate-200">{config.description}</span>
+              </div>
+            </div>
+
+            <section className="overflow-hidden rounded-3xl border border-slate-800/60 bg-slate-900/60 p-6 shadow-xl">
+              <div className="h-[380px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={processedData} margin={{ top: 30, right: 24, bottom: 12, left: 0 }}>
+                    <defs>
+                      <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#4ade80" stopOpacity="0.8" />
+                        <stop offset="100%" stopColor="#4ade80" stopOpacity="0.05" />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="#1e293b" strokeDasharray="4 4" />
+                    <XAxis dataKey="time" stroke="#94a3b8" tickLine={false} axisLine={{ stroke: "#1f2937" }} />
+                    <YAxis
+                      stroke="#94a3b8"
+                      tickLine={false}
+                      axisLine={{ stroke: "#1f2937" }}
+                      domain={yDomain}
+                      tickFormatter={(value) => `$${Math.round(value / 100) / 10}k`}
+                    />
+                    <Tooltip
+                      content={<CustomTooltip onValueChange={handleTooltipValueChange} />}
+                      cursor={{ stroke: "#475569", strokeWidth: 1, strokeDasharray: "3 3" }}
+                    />
+                    <ReferenceArea y1={Math.min(metrics.sessionLow, SUPPORT)} y2={SUPPORT} fill="rgba(59,130,246,0.08)" />
+                    {keyLevels.map((level) => (
+                      <ReferenceLine
+                        key={level.id}
+                        y={level.price}
+                        stroke={
+                          level.id === "resistance"
+                            ? "#f87171"
+                            : level.id === "support"
+                            ? "#60a5fa"
+                            : level.id === "sessionLow"
+                            ? "#facc15"
+                            : "#f43f5e"
+                        }
+                        strokeDasharray="4 4"
+                        label={{ value: level.chartLabel, position: "right", fill: "#94a3b8", fontSize: 12 }}
+                      />
+                    ))}
+                    <Area type="monotone" dataKey="price" stroke="none" fill="url(#priceGradient)" />
+                    <Line
+                      type="monotone"
+                      dataKey="price"
+                      stroke="#4ade80"
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: "#4ade80" }}
+                      activeDot={{ r: 6, stroke: "#facc15", strokeWidth: 2 }}
+                      isAnimationActive={false}
+                    />
+                    {latestPoint && (
+                      <ReferenceDot
+                        x={latestPoint.time}
+                        y={latestPoint.price}
+                        r={6}
+                        fill="#22c55e"
+                        stroke="#0f172a"
+                        strokeWidth={2}
+                      />
+                    )}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+
+            <section className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-3xl border border-slate-800/60 bg-slate-900/70 p-5 shadow">
+                <p className="text-xs uppercase tracking-widest text-slate-400">Spot Price</p>
+                <p className="mt-2 text-3xl font-semibold text-white">{formatCurrency(metrics.currentPrice)}</p>
+                <p
+                  className={`mt-1 text-sm ${
+                    metrics.priceChange >= 0 ? "text-emerald-400" : "text-rose-400"
+                  }`}
+                >
+                  {formatChange(metrics.priceChange)} ({formatPercent(metrics.priceChangePct)})
+                </p>
+                <p className="mt-4 text-xs text-slate-400">
+                  Average price {formatCurrency(metrics.averagePrice)} across this window.
+                </p>
+              </div>
+
+              <div className="rounded-3xl border border-slate-800/60 bg-slate-900/70 p-5 shadow">
+                <p className="text-xs uppercase tracking-widest text-slate-400">Momentum Score</p>
+                <p className="mt-2 text-3xl font-semibold text-white">{metrics.momentumScore}</p>
+                <div className="mt-3 h-2 rounded-full bg-slate-800">
+                  <div
+                    className={`h-2 rounded-full ${
+                      metrics.momentumScore >= 66
+                        ? "bg-emerald-400"
+                        : metrics.momentumScore >= 40
+                        ? "bg-amber-400"
+                        : "bg-rose-400"
+                    }`}
+                    style={{ width: `${metrics.momentumScore}%` }}
+                  ></div>
+                </div>
+                <p className="mt-4 text-xs text-slate-400">
+                  Latest move {formatChange(metrics.lastChange)} vs. prior {formatChange(metrics.prevChange)}.
+                </p>
+              </div>
+
+              <div className="rounded-3xl border border-slate-800/60 bg-slate-900/70 p-5 shadow">
+                <p className="text-xs uppercase tracking-widest text-slate-400">Volatility</p>
+                <p className="mt-2 text-3xl font-semibold text-white">{formatPercent(metrics.rangePct, false)}</p>
+                <p className="mt-1 text-sm text-slate-300">
+                  Range {formatCurrency(metrics.sessionLow)} – {formatCurrency(metrics.sessionHigh)}.
+                </p>
+                <p className="mt-4 text-xs text-slate-400">
+                  Use range extremes to calibrate targets and invalidation levels.
+                </p>
+              </div>
+            </section>
+
+            <section className="grid gap-4 lg:grid-cols-3">
+              <div className="rounded-3xl border border-slate-800/60 bg-slate-900/70 p-5 shadow lg:col-span-2">
+                <h2 className="text-lg font-semibold text-white">Key Level Monitor</h2>
+                <p className="text-sm text-slate-400">
+                  Hover the chart to sync with the level closest to the highlighted price.
+                </p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {keyLevels.map((level) => {
+                    const delta = metrics.currentPrice - level.price;
+                    const deltaPct = metrics.currentPrice
+                      ? (delta / metrics.currentPrice) * 100
+                      : 0;
+                    const highlighted = activeHighlight === level.id;
+                    let message = "";
+                    if (level.id === "resistance") {
+                      message =
+                        delta >= 0
+                          ? `Above supply zone \u2013 monitor acceptance for ${formatCurrency(config.targets.bull)} breakout.`
+                          : `Needs ${formatChange(-delta)} (${formatPercent(Math.abs(deltaPct), false)}) push to challenge sellers.`;
+                    } else if (level.id === "support") {
+                      message =
+                        delta >= 0
+                          ? `Support holding with ${formatChange(delta)} buffer (${formatPercent(Math.abs(deltaPct), false)}).`
+                          : `Slip of ${formatChange(delta)} risks session low retest.`;
+                    } else if (level.id === "sessionLow") {
+                      message =
+                        delta >= 0
+                          ? `Session floor intact; ${formatChange(delta)} above low keeps buyers engaged.`
+                          : `Underwater by ${formatChange(delta)} \u2013 weak structure, watch ${formatCurrency(DANGER_LINE)}.`;
+                    } else {
+                      message =
+                        delta >= 0
+                          ? `Safe distance of ${formatChange(delta)} above danger trigger.`
+                          : `Below danger trigger by ${formatChange(delta)} \u2013 anticipate liquidity sweep.`;
+                    }
+
+                    return (
+                      <div
+                        key={level.id}
+                        className={`rounded-2xl border p-4 transition shadow-sm ${
+                          highlighted
+                            ? "border-emerald-400 shadow-[0_0_25px_rgba(74,222,128,0.35)]"
+                            : "border-slate-800/70"
+                        } bg-slate-950/40`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className={`text-xs uppercase tracking-wide ${level.accent}`}>
+                              {level.label}
+                            </p>
+                            <p className="text-xl font-semibold text-white">
+                              {formatCurrency(level.price)}
+                            </p>
+                          </div>
+                          <p
+                            className={`text-sm font-semibold ${
+                              delta >= 0 ? "text-emerald-400" : "text-rose-400"
+                            }`}
+                          >
+                            {formatChange(delta)}
+                          </p>
+                        </div>
+                        <p className="mt-3 text-sm text-slate-300">{message}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-800/60 bg-slate-900/70 p-5 shadow">
+                <h2 className="text-lg font-semibold text-white">Playbook Notes</h2>
+                <ul className="mt-3 space-y-2 text-sm text-slate-300">
+                  {analysisBullets.map((item, index) => (
+                    <li key={index} className="flex items-start gap-2">
+                      <span className="mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full bg-emerald-400"></span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+
+            <section className="grid gap-4 md:grid-cols-2">
+              {scenarioCards.map((scenario) => (
+                <div
+                  key={scenario.id}
+                  className={`rounded-3xl border p-5 shadow ${scenario.tone}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-white">{scenario.title}</h3>
+                      <p className="text-sm text-slate-200">Probability: {scenario.probability}</p>
+                    </div>
+                    <ScenarioBadge tone={scenario.badgeTone}>{scenario.probability}</ScenarioBadge>
+                  </div>
+                  <ul className="mt-4 space-y-2 text-sm text-slate-200">
+                    {scenario.bullets.map((bullet, index) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-white/70"></span>
+                        <span>{bullet}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
+
+            <footer className="rounded-3xl border border-slate-800/60 bg-slate-900/70 p-5 text-sm text-slate-400 shadow">
+              Data shown here is simulated for demonstration purposes. Always corroborate with live market feeds before trading.
+            </footer>
+          </div>
+        );
+      }
+
+      const rootElement = document.getElementById("root");
+      const root = ReactDOM.createRoot(rootElement);
+      root.render(<BTC12hAnalysis />);
+    </script>
+  </body>
+</html>
