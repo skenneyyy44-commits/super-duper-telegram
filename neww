@@ -1,0 +1,90 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/app.py b/app.py
+index 8b9bf2dcb8142dd1e30ec726b95767e0d2062cea..6819b56b34b306fa70ac58bf37bf06cd407d2630 100644
+--- a/app.py
++++ b/app.py
+@@ -65,60 +65,71 @@ except ModuleNotFoundError:  # pragma: no cover - exercised indirectly in tests
+             self.static_folder = static_folder
+             self.config: Dict[str, Any] = {}
+             self._routes: List[Tuple[str, Tuple[str, ...], Dict[str, Any], Callable[..., Any]]] = []
+             self._teardowns: List[Callable[[Optional[BaseException]], Any]] = []
+ 
+         def route(
+             self,
+             rule: str,
+             methods: Optional[Iterable[str]] = None,
+             defaults: Optional[Dict[str, Any]] = None,
+         ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+             def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+                 self._routes.append((rule, tuple(methods or ["GET"]), defaults or {}, func))
+                 return func
+ 
+             return decorator
+ 
+         def test_client(self) -> MiniTestClient:
+             return MiniTestClient(self)
+ 
+         def teardown_appcontext(self, func: Callable[[Optional[BaseException]], Any]) -> Callable[[Optional[BaseException]], Any]:
+             self._teardowns.append(func)
+             return func
+ 
+         def _dispatch_request(self, method: str, path: str, data: Any = None) -> SimpleResponse:
+-            for rule, methods, defaults, func in self._routes:  # type: ignore[attr-defined]
+-                if method not in methods:
+-                    continue
+-                match = self._match(rule, path)
+-                if match is None:
+-                    continue
+-                kwargs = {**defaults, **match}
+-                result = func(**kwargs) if kwargs else func()
+-                return self._make_response(result)
+-            return SimpleResponse("Not Found", status=404)
++            exception: Optional[BaseException] = None
++            try:
++                for rule, methods, defaults, func in self._routes:  # type: ignore[attr-defined]
++                    if method not in methods:
++                        continue
++                    match = self._match(rule, path)
++                    if match is None:
++                        continue
++                    kwargs = {**defaults, **match}
++                    result = func(**kwargs) if kwargs else func()
++                    return self._make_response(result)
++                return SimpleResponse("Not Found", status=404)
++            except BaseException as exc:
++                exception = exc
++                raise
++            finally:
++                for teardown in self._teardowns:
++                    try:
++                        teardown(exception)
++                    except Exception:
++                        continue
+ 
+         @staticmethod
+         def _match(rule: str, path: str) -> Optional[Dict[str, Any]]:
+             if "<path:path>" not in rule:
+                 return {} if rule == path else None
+ 
+             prefix = rule.split("<path:path>", 1)[0]
+             if not path.startswith(prefix):
+                 return None
+             remainder = path[len(prefix):]
+             if remainder.startswith("/"):
+                 remainder = remainder[1:]
+             return {"path": remainder}
+ 
+         @staticmethod
+         def _make_response(result: Any) -> SimpleResponse:
+             if isinstance(result, SimpleResponse):
+                 return result
+ 
+             body = result
+             status = 200
+             headers: Optional[Dict[str, str]] = None
+ 
+             if isinstance(result, tuple):
+                 body = result[0]
+ 
+EOF
+)
