@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Earthquake Wave Laboratory</title>
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="hero">
+        <h1>Earthquake Wave Laboratory</h1>
+        <p>
+          A physically inspired simulation of seismic surface waves. Adjust
+          parameters, trigger epicenters, and watch energy travel through the
+          terrain.
+        </p>
+      </header>
+      <main>
+        <section class="controls">
+          <div class="control-group">
+            <label for="magnitude">Magnitude</label>
+            <input type="range" id="magnitude" min="3" max="9" step="0.1" value="6.5" />
+            <span class="value" data-for="magnitude">6.5</span>
+          </div>
+          <div class="control-group">
+            <label for="waveSpeed">Wave Speed</label>
+            <input type="range" id="waveSpeed" min="200" max="900" step="10" value="520" />
+            <span class="value" data-for="waveSpeed">520 m/s</span>
+          </div>
+          <div class="control-group">
+            <label for="damping">Damping</label>
+            <input type="range" id="damping" min="0" max="0.2" step="0.005" value="0.03" />
+            <span class="value" data-for="damping">0.030</span>
+          </div>
+          <div class="control-group">
+            <label for="faultCount">Fault Lines</label>
+            <input type="range" id="faultCount" min="1" max="6" step="1" value="3" />
+            <span class="value" data-for="faultCount">3</span>
+          </div>
+          <button id="trigger">Trigger Epicenter</button>
+          <button id="aftershock">Aftershock</button>
+          <button id="reset">Reset Terrain</button>
+        </section>
+        <section class="visualization">
+          <canvas id="simulationCanvas" width="960" height="540"></canvas>
+          <div class="metrics">
+            <div>
+              <span class="label">Peak Ground Acceleration</span>
+              <span id="pga" class="metric-value">0.00 g</span>
+            </div>
+            <div>
+              <span class="label">Energy Flux</span>
+              <span id="energy" class="metric-value">0.00 MJ</span>
+            </div>
+            <div>
+              <span class="label">Rupture Time</span>
+              <span id="rupture" class="metric-value">--</span>
+            </div>
+          </div>
+          <aside class="legend">
+            <h2>Legend</h2>
+            <div class="gradient"></div>
+            <p>Colors encode surface displacement. Buildings pulsate with local intensity.</p>
+          </aside>
+          <div class="city">
+            <div class="building" data-height="3"></div>
+            <div class="building" data-height="5"></div>
+            <div class="building" data-height="4"></div>
+            <div class="building" data-height="6"></div>
+            <div class="building" data-height="2"></div>
+          </div>
+        </section>
+      </main>
+      <footer>
+        <p>
+          Simulation uses an explicit finite-difference solver with adaptive
+          stability control and spectral noise terrain synthesis for realistic
+          ground motion.
+        </p>
+      </footer>
+    </div>
+    <script src="js/earthquake.js"></script>
+  </body>
+</html>
