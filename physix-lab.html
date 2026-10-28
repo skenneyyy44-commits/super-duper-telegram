@@ -12,7 +12,7 @@
 <aside id="panel" aria-label="Physics lab controls">
 <button id="collapse" class="dismiss" aria-label="Hide controls">×</button>
 <h1>Physix Lab 3D</h1>
-<p id="status" class="status" aria-live="polite"><span id="runstate" aria-live="polite">PAUSED</span> · <span id="objectCount">Objects: 0</span> · <span id="fps">FPS: measuring…</span></p>
+<p id="status" class="status"><span id="runstate" aria-live="polite">PAUSED</span> · <span id="objectCount">Objects: 0</span> · <span id="fps">FPS: measuring…</span></p>
 <div class="group"><div class="buttons" id="shapes">
 <button data-shape="sphere" class="active">Sphere</button><button data-shape="cube">Cube</button><button data-shape="cylinder">Cylinder</button><button data-shape="pyramid">Pyramid</button>
 </div></div>
@@ -64,10 +64,16 @@ function setPlaying(on){state.playing=on;$('toggle').textContent=on?'⏸ Pause s
 $('toggle').onclick=()=>setPlaying(!state.playing);$('reset').onclick=()=>{clear();setPlaying(false)};
 document.querySelectorAll('[data-shape]').forEach(btn=>btn.onclick=()=>{state.shape=btn.dataset.shape;document.querySelectorAll('[data-shape]').forEach(b=>b.classList.toggle('active',b===btn))});
 for(const [id,out,action] of [['gravity','gravityOut',v=>world.gravity.y=v],['bounce','bounceOut',v=>{world.contactmaterials.forEach(c=>c.restitution=v)}],['friction','frictionOut',v=>{world.contactmaterials.forEach(c=>c.friction=v)}]])$(''+id).oninput=e=>{let v=Number(e.target.value);$(out).textContent=v.toFixed(2);action(v)};
+// BEGIN TESTABLE PHYSICS HELPERS
+const ORBIT_MU=22,ORBIT_CENTER=Object.freeze({x:0,y:2,z:0});
+function orbitVelocity(radius,angle){const speed=Math.sqrt(ORBIT_MU/radius);return {x:-Math.sin(angle)*speed,y:0,z:Math.cos(angle)*speed}}
+function orbitForce(position,mass){const dx=ORBIT_CENTER.x-position.x,dy=ORBIT_CENTER.y-position.y,dz=ORBIT_CENTER.z-position.z;const d2=dx*dx+dy*dy+dz*dz;const safeD2=Math.max(d2,2.25);const length=Math.sqrt(d2);if(length===0)return {x:0,y:0,z:0};const scale=mass*ORBIT_MU/(safeD2*length);return {x:dx*scale,y:dy*scale,z:dz*scale}}
+function dominoLayout(count=24){let a=0;const result=[];for(let i=0;i<count;i++){const radius=2+i*.085;result.push({x:Math.cos(a)*radius,y:.635,z:Math.sin(a)*radius,yaw:Math.PI/2-a,tilt:i===0?.28:0});a+=.68/radius}return result}
+// END TESTABLE PHYSICS HELPERS
 function preset(type){clear();if(type!=='orbit'){world.gravity.set(0,-9.81,0);$('gravity').value='-9.81';$('gravityOut').textContent='-9.81'}if(type==='pyramid'){for(let row=0;row<6;row++)for(let col=0;col<6-row;col++)spawn('cube',(col-(5-row)/2)*1.13,.58+row*1.12,0)}
-if(type==='domino'){let a=0;for(let i=0;i<24;i++){const radius=2+i*.085;const b=spawn('domino',Math.cos(a)*radius,.635,Math.sin(a)*radius);b.quaternion.setFromEuler(0,Math.PI/2-a,0);if(i===0){b.quaternion.setFromEuler(.28,Math.PI/2-a,0)}a+=.68/radius;}}
+if(type==='domino'){for(const item of dominoLayout()){const b=spawn('domino',item.x,item.y,item.z);b.quaternion.setFromEuler(item.tilt,item.yaw,0)}}
 if(type==='wreck'){for(let row=0;row<3;row++)for(let col=0;col<4;col++)spawn('cube',col*1.1-1.65,.56+row*1.1,0,{r:.53});const b=spawn('sphere',-8,5,0,{r:1.1,mass:25,color:0xffb44e});b.velocity.set(12,0,0)}
-if(type==='orbit'){world.gravity.set(0,0,0);$('gravity').value='0';$('gravityOut').textContent='0.00';spawn('sphere',0,2,0,{r:1.2,mass:0,color:0x69bcff});const mu=22;for(let i=0;i<9;i++){const t=i*Math.PI*2/9,r=3+i*.4,b=spawn('sphere',r*Math.cos(t),2,r*Math.sin(t),{r:.26,orbit:true});const speed=Math.sqrt(mu/r);b.velocity.set(-Math.sin(t)*speed,0,Math.cos(t)*speed);state.orbiters.push(b)}}
+if(type==='orbit'){world.gravity.set(0,0,0);$('gravity').value='0';$('gravityOut').textContent='0.00';spawn('sphere',ORBIT_CENTER.x,ORBIT_CENTER.y,ORBIT_CENTER.z,{r:1.2,mass:0,color:0x69bcff});for(let i=0;i<9;i++){const t=i*Math.PI*2/9,r=3+i*.4,b=spawn('sphere',ORBIT_CENTER.x+r*Math.cos(t),ORBIT_CENTER.y,ORBIT_CENTER.z+r*Math.sin(t),{r:.26,orbit:true});const v=orbitVelocity(r,t);b.velocity.set(v.x,v.y,v.z);state.orbiters.push(b)}}
 setPlaying(true)}
 document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>preset(b.dataset.preset));
 const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();let down=null;
@@ -75,8 +81,7 @@ renderer.domElement.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.cli
 renderer.domElement.addEventListener('pointerup',e=>{if(!down||down.button!==0||Math.hypot(e.clientX-down.x,e.clientY-down.y)>6){down=null;return}down=null;const rect=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(pointer,camera);const pos=new THREE.Vector3();if(ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),0),pos)){spawn(state.shape,pos.x,7,pos.z);updateStatus()}});
 $('collapse').onclick=()=>{$('panel').style.display='none';$('hide').style.display='block'};$('hide').onclick=()=>{$('panel').style.display='block';$('hide').style.display='none'};
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
-const orbitCenter=new CANNON.Vec3(0,2,0);
-function applyOrbitGravity(){const mu=22;for(const b of state.orbiters){const offset=orbitCenter.vsub(b.position);const distanceSquared=Math.max(offset.lengthSquared(),2.25);offset.normalize();offset.scale(b.mass*mu/distanceSquared,b.force);b.wakeUp();}}
+function applyOrbitGravity(){for(const b of state.orbiters){const force=orbitForce(b.position,b.mass);b.force.set(force.x,force.y,force.z);b.wakeUp()}}
 let prev=performance.now(),acc=0,frames=0,elapsed=0;
 function loop(now){
  requestAnimationFrame(loop);
