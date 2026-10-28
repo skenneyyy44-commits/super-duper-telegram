@@ -1,0 +1,6 @@
+image: node:22-alpine
+stages: [test]
+physix_lab_checks:
+  stage: test
+  script:
+    - node --test tests/test_physix_lab.cjs
