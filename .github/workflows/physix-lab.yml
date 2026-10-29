@@ -1,0 +1,27 @@
+name: Physix Lab 3D checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'physix-lab.html'
+      - 'tests/test_physix_lab.cjs'
+      - '.github/workflows/physix-lab.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'physix-lab.html'
+      - 'tests/test_physix_lab.cjs'
+      - '.github/workflows/physix-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  physics-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/test_physix_lab.cjs

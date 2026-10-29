@@ -25,6 +25,14 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
   const abortControllerRef = useRef(null);
 
   const canAnalyze = useMemo(() => Boolean(previewImage) && aiStatus !== 'loading', [previewImage, aiStatus]);
+  const potentialIssues = useMemo(
+    () => (Array.isArray(aiPayload?.potential_issues) ? aiPayload.potential_issues : []),
+    [aiPayload],
+  );
+  const careRecommendations = useMemo(
+    () => (Array.isArray(aiPayload?.care_recommendations) ? aiPayload.care_recommendations : []),
+    [aiPayload],
+  );
 
   const handleFileSelected = useCallback(async (file) => {
     try {
@@ -65,8 +73,8 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
     if (!previewImage || !firestore) {
       return;
     }
-    setSaveError(null);
     setIsSaving(true);
+    setSaveError(null);
 
     try {
       const path = `/artifacts/${appId}/users/${userId}/plants/${plantId}/healthLogs`;
@@ -141,36 +149,40 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
               <span className="font-semibold text-gray-900">Species:</span> {aiPayload.plant_species || 'Not identified'}
             </p>
             <p className="text-sm text-gray-700">
-              <span className="font-semibold text-gray-900">Summary:</span> {aiPayload.health_summary}
+              <span className="font-semibold text-gray-900">Summary:</span>{' '}
+              {aiPayload.health_summary || 'No summary available yet.'}
             </p>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <h4 className="text-sm font-semibold text-red-700 uppercase">Potential issues</h4>
                 <ul className="mt-2 space-y-1 text-sm text-red-700 list-disc list-inside">
-                  {aiPayload.potential_issues.map((issue, index) => (
-                    <li key={index}>{issue}</li>
-                  ))}
+                  {potentialIssues.length > 0 ? (
+                    potentialIssues.map((issue, index) => <li key={index}>{issue}</li>)
+                  ) : (
+                    <li>No issues detected yet.</li>
+                  )}
                 </ul>
               </div>
               <div>
                 <h4 className="text-sm font-semibold text-green-700 uppercase">Care recommendations</h4>
                 <ul className="mt-2 space-y-1 text-sm text-green-700 list-disc list-inside">
-                  {aiPayload.care_recommendations.map((item, index) => (
-                    <li key={index}>{item}</li>
-                  ))}
+                  {careRecommendations.length > 0 ? (
+                    careRecommendations.map((item, index) => <li key={index}>{item}</li>)
+                  ) : (
+                    <li>No recommendations available yet.</li>
+                  )}
                 </ul>
               </div>
             </div>
           </div>
         )}
 
-        {saveError && (
-          <p className="text-sm text-red-600">
-            Unable to save this log. Please try again.
-          </p>
-        )}
-
         <div className="flex justify-end gap-3 pt-4">
+          {saveError && (
+            <p className="mr-auto text-sm text-red-600">
+              {saveError?.message || 'Unable to save this log. Please try again.'}
+            </p>
+          )}
           <button
             type="button"
             onClick={onClose}

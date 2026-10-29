@@ -34,19 +34,27 @@ def test_db_dir_exists():
 
 
 def test_data_manager_stops_after_request_using_fallback(monkeypatch):
-    monkeypatch.setattr(app_module, "Flask", app_module.MiniFlask)
+    # Load a separate module with Flask unavailable; preserve the real backend.
+    import importlib.util
 
-    tracked: list[app_module.DataManager] = []
-    OriginalDataManager = app_module.DataManager
+    spec = importlib.util.spec_from_file_location("fallback_app", app_module.__file__)
+    fallback_app = importlib.util.module_from_spec(spec)
+    with monkeypatch.context() as isolated:
+        isolated.setitem(sys.modules, "flask", None)
+        spec.loader.exec_module(fallback_app)
+    monkeypatch.setattr(fallback_app, "Flask", fallback_app.MiniFlask)
+
+    tracked: list[fallback_app.DataManager] = []
+    OriginalDataManager = fallback_app.DataManager
 
     class TrackingDataManager(OriginalDataManager):
         def __init__(self):
             super().__init__()
             tracked.append(self)
 
-    monkeypatch.setattr(app_module, "DataManager", TrackingDataManager)
+    monkeypatch.setattr(fallback_app, "DataManager", TrackingDataManager)
 
-    flask_app = create_app()
+    flask_app = fallback_app.create_app()
     assert tracked, "DataManager instance should be created"
     data_manager = tracked[0]
     assert data_manager.started is True
