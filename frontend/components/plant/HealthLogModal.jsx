@@ -85,9 +85,9 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
         createdAt: Timestamp.now(),
       });
       onClose();
-    } catch (saveError) {
-      console.error('Failed to save health log', saveError);
-      setSaveError(saveError);
+    } catch (error) {
+      console.error('Failed to save health log', error);
+      setSaveError(error);
     } finally {
       setIsSaving(false);
     }
