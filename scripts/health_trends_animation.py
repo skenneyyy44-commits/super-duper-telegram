@@ -11,8 +11,6 @@ When --out is provided, a GIF is saved instead of displaying the plot.
 import argparse
 import pandas as pd
 import numpy as np
-import matplotlib
-matplotlib.use("Agg")  # Enables headless operation
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.animation import FuncAnimation
@@ -44,7 +42,10 @@ def animate(df, out_path=None):
 
     lines = []
     for ax, (col, ylabel) in zip(axes, metrics):
-        (line,) = ax.plot([], [], marker="o")
+        (line,) = ax.plot(df.index, df[col], marker="o")
+        ax.relim()
+        ax.autoscale_view()
+        line.set_data([], [])
         ax.set_ylabel(ylabel)
         ax.grid(True)
         lines.append(line)
