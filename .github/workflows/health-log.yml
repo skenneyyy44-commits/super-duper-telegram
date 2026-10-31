@@ -3,12 +3,16 @@ on:
   pull_request:
     paths:
       - 'frontend/components/plant/HealthLogModal.jsx'
+      - 'frontend/components/plant/HealthLogEntry.jsx'
+      - 'frontend/utils/ai.js'
       - 'tests/health-log/**'
       - '.github/workflows/health-log.yml'
   push:
     branches: [main]
     paths:
       - 'frontend/components/plant/HealthLogModal.jsx'
+      - 'frontend/components/plant/HealthLogEntry.jsx'
+      - 'frontend/utils/ai.js'
       - 'tests/health-log/**'
       - '.github/workflows/health-log.yml'
   workflow_dispatch:
