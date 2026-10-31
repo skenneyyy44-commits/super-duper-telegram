@@ -1,0 +1,31 @@
+name: BosWash layer visibility
+on:
+  pull_request:
+    paths:
+      - 'src/BosWashMap.jsx'
+      - 'tests/boswash/**'
+      - '.github/workflows/boswash.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/BosWashMap.jsx'
+      - 'tests/boswash/**'
+      - '.github/workflows/boswash.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  layer-visibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/boswash/package-lock.json
+      - run: npm ci
+        working-directory: tests/boswash
+      - run: npm test
+        working-directory: tests/boswash
