@@ -1,7 +1,7 @@
 {
   "name": "health-log-regressions",
   "private": true,
-  "scripts": { "test": "node --test health-log.test.cjs" },
+  "scripts": { "test": "node --test" },
   "devDependencies": {
     "esbuild": "0.27.7",
     "react": "19.2.0",

@@ -368,19 +368,19 @@ export default function BosWashMap() {
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="rounded-xl bg-sky-900/20 px-3 py-2 ring-1 ring-sky-900/40">
               <div className="text-[11px] text-sky-300/80">I‑95 (within box)</div>
-              <div className="text-sky-100 text-base font-bold">{stats.i95Miles ? `${stats.i95Miles.toLocaleString()} mi` : "…"}</div>
+              <div className="text-sky-100 text-base font-bold">{loading ? "…" : `${stats.i95Miles.toLocaleString()} mi`}</div>
             </div>
             <div className="rounded-xl bg-sky-900/20 px-3 py-2 ring-1 ring-sky-900/40">
               <div className="text-[11px] text-sky-300/80">Direct corridor</div>
-              <div className="text-sky-100 text-base font-bold">{stats.corridorMiles ? `${stats.corridorMiles.toLocaleString()} mi` : "…"}</div>
+              <div className="text-sky-100 text-base font-bold">{loading ? "…" : `${stats.corridorMiles.toLocaleString()} mi`}</div>
             </div>
             <div className="rounded-xl bg-emerald-900/20 px-3 py-2 ring-1 ring-emerald-900/40">
               <div className="text-[11px] text-emerald-300/80">Amtrak stations</div>
-              <div className="text-emerald-100 text-base font-bold">{stats.amtrakCount || "…"}</div>
+              <div className="text-emerald-100 text-base font-bold">{loading ? "…" : stats.amtrakCount.toLocaleString()}</div>
             </div>
             <div className="rounded-xl bg-amber-900/20 px-3 py-2 ring-1 ring-amber-900/40">
               <div className="text-[11px] text-amber-300/80">Airports (IATA)</div>
-              <div className="text-amber-100 text-base font-bold">{stats.airportCount || "…"}</div>
+              <div className="text-amber-100 text-base font-bold">{loading ? "…" : stats.airportCount.toLocaleString()}</div>
             </div>
           </div>
 

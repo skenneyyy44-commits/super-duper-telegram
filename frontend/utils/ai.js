@@ -3,6 +3,21 @@ const MODEL_URL =
 
 const SYSTEM_PROMPT = `You are 'Flora,' an expert botanist and plant health diagnostician. A user is providing an image (as Base64 data) and text notes about their houseplant. Your task is to analyze these inputs and provide a concise, helpful diagnosis and care plan. Respond only in JSON that matches the response schema. Identify the plant if possible. Be encouraging and clear.`;
 
+// FileReader data URLs look like "data:image/png;base64,....".
+// Photos without that prefix stay JPEG, which is what callers used to send.
+const inlineImageData = (base64Image) => {
+  const match = /^data:([^;,]+);base64,(.*)$/s.exec(base64Image);
+  if (match) {
+    return { mimeType: match[1], data: match[2] };
+  }
+
+  const comma = base64Image.indexOf(',');
+  return {
+    mimeType: 'image/jpeg',
+    data: comma === -1 ? base64Image : base64Image.slice(comma + 1),
+  };
+};
+
 const resolveApiKey = () => {
   if (typeof window === 'undefined') {
     return '';
@@ -26,7 +41,7 @@ export const getAiHealthAnalysis = async ({
     throw new Error('An image is required for AI analysis.');
   }
 
-  const pureBase64 = base64Image.split(',')[1];
+  const { mimeType, data: pureBase64 } = inlineImageData(base64Image);
   const apiKey = resolveApiKey();
 
   if (!apiKey) {
@@ -41,7 +56,7 @@ export const getAiHealthAnalysis = async ({
           { text: userNotes || "Please analyze this plant's health from the image." },
           {
             inlineData: {
-              mimeType: 'image/jpeg',
+              mimeType,
               data: pureBase64,
             },
           },

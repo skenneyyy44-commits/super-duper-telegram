@@ -1,0 +1,12 @@
+{
+  "name": "boswash-map-stats",
+  "private": true,
+  "scripts": {
+    "test": "node --test stat-display.test.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.27.7",
+    "react": "19.2.0",
+    "react-test-renderer": "19.2.0"
+  }
+}
