@@ -10,7 +10,8 @@ import { motion } from "framer-motion";
 // map.getLayer before the style loads or after map removal.
 // - Introduces `ready` flag + `hasInit` guard for StrictMode
 // - `safeSetVis()` checks for map existence + style readiness
-// - Visibility reapplied after async Overpass layers mount
+// - Visibility reapplied after async Overpass layers mount,
+//   using the latest toggle state rather than the state from map init
 // - AbortController to cancel fetches on unmount
 // - Lightweight self-tests (console) to validate edge-cases
 // ENHANCEMENT:
@@ -92,6 +93,10 @@ export default function BosWashMap() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [visible, setVisible] = useState({ i95: true, amtrak: true, airports: true, cities: true });
+  // Map setup runs once, but Overpass layers arrive later. Keep the toggles
+  // the user has changed in that window so the delayed layers honor them.
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const [stats, setStats] = useState({ i95Miles: 0, corridorMiles: 0, amtrakCount: 0, airportCount: 0 });
 
   // Corridor line from the ordered city list
@@ -125,7 +130,7 @@ export default function BosWashMap() {
     }
   };
 
-  const applyVisibility = (vis = visible) => {
+  const applyVisibility = (vis = visibleRef.current) => {
     // Apply all toggles—ok to call repeatedly; no-ops if layers missing
     safeSetVis("i95-line", vis.i95);
     ["amtrak-clusters", "amtrak-unclustered", "amtrak-labels"].forEach((l) => safeSetVis(l, vis.amtrak));
