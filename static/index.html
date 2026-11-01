@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Canvas Echocardiogram Simulator — Apical 4‑Chamber</title>
+<style>
+  :root {
+    --bg:#0b0f14; --panel:#111823; --soft:#1a2332; --accent:#6ee7ff; --accent2:#8b5cf6; --text:#e6edf3; --muted:#94a3b8;
+  }
+  *{box-sizing:border-box}
+  body{ margin:0; background:radial-gradient(1200px 800px at 70% -10%, #0e1726 0%, var(--bg) 45%, #06080d 100%);
+        color:var(--text); font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        height:100vh; display:grid; grid-template-rows:auto 1fr; }
+  header{ padding:14px 18px; display:flex; flex-wrap:wrap; gap:12px 18px; align-items:center; border-bottom:1px solid #1c2533;
+          background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent); }
+  header h1{ font-size:16px; margin:0; font-weight:600; letter-spacing:.3px; color:#c7d2fe; display:flex; align-items:center; gap:10px }
+  header h1 span.badge{ font-size:12px; color:#0b1220; background:#a5b4fc22; border:1px solid #6366f180; padding:2px 8px; border-radius:999px }
+  .grid{ display:grid; grid-template-columns: 1.2fr 1fr; gap:16px; padding:16px; min-height:0; }
+  .panel{ background:linear-gradient(180deg, var(--panel), var(--soft)); border:1px solid #1f2a3d; border-radius:14px; overflow:hidden; min-height:0;
+          box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04); }
+  .panel .head{ padding:12px 14px; background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01)); border-bottom:1px solid #1f2a3d;
+                display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .panel .head h2{ margin:0; font-size:13px; font-weight:600; color:#a3bffa; letter-spacing:.3px }
+  .canvas-wrap{ position:relative; aspect-ratio:16/10; background:#02070f; }
+  canvas{ width:100%; height:100%; display:block; background:#000; image-rendering:crisp-edges; image-rendering:pixelated; }
+  .hud{ position:absolute; inset:10px auto auto 10px; font-size:11px; color:#cbd5e1; background:rgba(0,0,0,.35); backdrop-filter: blur(3px);
+        padding:8px 10px; border-radius:8px; border:1px solid rgba(148,163,184,.2); max-width:min(60ch, 60%); }
+  .legend{ display:flex; gap:12px; align-items:center; flex-wrap:wrap }
+  .legend .dot{ width:10px; height:10px; border-radius:50% }
+  .controls{ display:grid; grid-template-columns: repeat(2, minmax(160px,1fr)); gap:12px; padding:12px 14px }
+  .ctrl{ display:grid; gap:6px; background:#0c1420; border:1px solid #1c2a40; padding:10px; border-radius:10px }
+  .ctrl label{ font-size:12px; color:var(--muted) }
+  .ctrl input[type="range"]{ width:100% }
+  .row{ display:flex; gap:8px; flex-wrap:wrap }
+  .btn{ appearance:none; border:none; border-radius:10px; padding:10px 12px; background:#0d1826; border:1px solid #21314b; color:#cde2ff; cursor:pointer; font-weight:600 }
+  .btn:active{ transform:translateY(1px) }
+  .btn.toggle[aria-pressed="true"]{ box-shadow:0 0 0 2px #0ea5e9aa inset; background:#0a2436; color:#e0f2fe }
+  .ekg{ height:54px; background:linear-gradient(180deg,#05111f 0%,#000 100%); border-top:1px solid #1f2a3d; position:relative; }
+  .ekg canvas{ height:100% }
+  .foot{ padding:10px 14px; border-top:1px dashed #1f2a3d; color:#97a6ba; font-size:12px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap }
+  @media (max-width: 980px){ .grid{ grid-template-columns: 1fr } }
+  .pip3d{ position:absolute; right:10px; bottom:10px; width:min(36%, 360px); height:min(36%, 360px); border:1px solid #1f2a3d; border-radius:12px;
+          box-shadow:0 6px 18px rgba(0,0,0,.45); background:#000; }
+  .diag{ font-size:11px; color:#a8b3c7; padding:10px 14px; border-top:1px dashed #1f2a3d }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Canvas Echocardiogram <span class="badge">Apical 4‑Chamber • B‑mode • Doppler toggle • 3D Heart</span></h1>
+    <div class="legend">
+      <span class="dot" style="background:#e2e8f0"></span><span>B‑mode speckle</span>
+      <span class="dot" style="background:#ef4444"></span><span>Doppler (toward)</span>
+      <span class="dot" style="background:#3b82f6"></span><span>Doppler (away)</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="head"><h2>Ultrasound View</h2>
+        <div class="row">
+          <button class="btn toggle" id="btnDoppler" aria-pressed="false" title="Toggle color Doppler overlay">Doppler</button>
+          <button class="btn toggle" id="btnSweep" aria-pressed="true" title="Toggle sector sweep line">Sweep</button>
+          <button class="btn" id="btnFreeze" title="Freeze/unfreeze">Freeze</button>
+          <button class="btn" id="btnReset" title="Reset">Reset</button>
+          <button class="btn toggle" id="btn3D" aria-pressed="true" title="Toggle 3D heart">3D Heart</button>
+        </div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="echo"></canvas>
+        <canvas id="heart3d" class="pip3d"></canvas>
+        <div class="hud" id="hud"></div>
+      </div>
+      <div class="controls">
+        <div class="ctrl">
+          <label for="rate">Heart Rate (BPM)</label>
+          <input type="range" id="rate" min="40" max="140" value="75"/>
+        </div>
+        <div class="ctrl">
+          <label for="gain">Gain</label>
+          <input type="range" id="gain" min="0" max="200" value="120"/>
+        </div>
+        <div class="ctrl">
+          <label for="depth">Depth (zoom)</label>
+          <input type="range" id="depth" min="60" max="140" value="100"/>
+        </div>
+        <div class="ctrl">
+          <label for="speckle">Speckle Intensity</label>
+          <input type="range" id="speckle" min="0" max="200" value="130"/>
+        </div>
+      </div>
+      <div class="ekg">
+        <canvas id="ekg"></canvas>
+      </div>
+      <div class="foot">
+        <div>Tip: drag across the ultrasound region to scrub the last 6 seconds (cine loop). Double‑click to drop a caliper.</div>
+        <div>Built with pure Canvas • No libraries</div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="head"><h2>Annotations</h2></div>
+      <div style="padding:14px; font-size:13px; color:#cbd5e1;">
+        <ul style="margin:0 0 10px 18px; line-height:1.6">
+          <li>Apical 4‑chamber schematic with dynamic end‑diastole/end‑systole motion.</li>
+          <li>Ultrasound B‑mode speckle &amp; sector sweep with TGC‑like gain.</li>
+          <li>Color Doppler overlay over AV valves with sinusoidal flow model.</li>
+          <li>ECG‑like trace synced to heart cycle (QRS spikes trigger systole).</li>
+          <li>Cine loop buffer (6s), freeze, calipers (distance in pixels).</li>
+        </ul>
+        <hr style="border:none;border-top:1px solid #1f2a3d;margin:10px 0">
+        <p><strong>Hotkeys</strong>: Space = Freeze • D = Doppler • S = Sweep • R = Reset</p>
+        <p><strong>Note</strong>: Didactic simulation — not a medical device.</p>
+      </div>
+      <div class="diag" id="diag">Diagnostics: (running tests...)</div>
+    </aside>
+  </div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('echo');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const ekg = document.getElementById('ekg');
+  const ectx = ekg.getContext('2d', { alpha: false });
+  const hud = document.getElementById('hud');
+  const heart3d = document.getElementById('heart3d');
+  const diagEl = document.getElementById('diag');
+
+  function fit(){
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width*dpr);
+    canvas.height = Math.floor(rect.height*dpr);
+    ekg.width = Math.floor(ekg.clientWidth*dpr);
+    ekg.height = Math.floor(ekg.clientHeight*dpr);
+    if (heart3d){
+      const r = heart3d.getBoundingClientRect();
+      heart3d.width = Math.max(200, Math.floor(r.width*dpr));
+      heart3d.height = Math.max(200, Math.floor(r.height*dpr));
+    }
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ectx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', fit, { passive:true });
+  fit();
+
+  const rate = document.getElementById('rate');
+  const gain = document.getElementById('gain');
+  const depth = document.getElementById('depth');
+  const speckle = document.getElementById('speckle');
+  const btnDoppler = document.getElementById('btnDoppler');
+  const btnSweep = document.getElementById('btnSweep');
+  const btnFreeze = document.getElementById('btnFreeze');
+  const btnReset = document.getElementById('btnReset');
+  const btn3D = document.getElementById('btn3D');
+
+  let doppler = false;
+  let sweepOn = true;
+  let frozen = false;
+  let calipers = [];
+  let show3D = true;
+
+  btnDoppler.addEventListener('click', ()=>{
+    doppler = !doppler; btnDoppler.setAttribute('aria-pressed', doppler);
+  });
+  btnSweep.addEventListener('click', ()=>{
+    sweepOn = !sweepOn; btnSweep.setAttribute('aria-pressed', sweepOn);
+  });
+  btnFreeze.addEventListener('click', ()=>{ frozen = !frozen; });
+  btn3D.addEventListener('click', ()=>{ show3D = !show3D; btn3D.setAttribute('aria-pressed', show3D); });
+  btnReset.addEventListener('click', ()=>{
+    rate.value = 75; gain.value=120; depth.value=100; speckle.value=130;
+    doppler=false; sweepOn=true; frozen=false; calipers=[]; show3D=true;
+    btnDoppler.setAttribute('aria-pressed', false);
+    btnSweep.setAttribute('aria-pressed', true);
+    btn3D.setAttribute('aria-pressed', true);
+  });
+
+  const state = { t0: performance.now(), phase: 0, cine: [], cineLen: 360, scrub: -1 };
+
+  const ekgBuf = new Float32Array(1200).fill(0);
+  let ekgWrite = 0;
+
+  const cineRect = ()=> canvas.getBoundingClientRect();
+  let isScrubbing = false;
+  canvas.addEventListener('pointerdown', (e)=>{
+    if (e.detail===2){
+      const r = cineRect();
+      const x = (e.clientX - r.left); const y = (e.clientY - r.top);
+      calipers.push({x,y}); return;
+    }
+    isScrubbing = true; scrubAt(e);
+  });
+  window.addEventListener('pointermove', (e)=> isScrubbing && scrubAt(e));
+  window.addEventListener('pointerup', ()=>{ isScrubbing=false; state.scrub=-1; });
+  function scrubAt(e){
+    const r = cineRect();
+    const x = Math.max(0, Math.min(r.width, e.clientX - r.left));
+    const idx = Math.floor((x / r.width) * (state.cine.length-1));
+    state.scrub = Math.max(0, Math.min(state.cine.length-1, idx));
+  }
+
+  window.addEventListener('keydown',(e)=>{
+    if (e.code==='Space'){ e.preventDefault(); frozen=!frozen; }
+    if (e.key==='d' || e.key==='D'){ doppler=!doppler; btnDoppler.setAttribute('aria-pressed', doppler); }
+    if (e.key==='s' || e.key==='S'){ sweepOn=!sweepOn; btnSweep.setAttribute('aria-pressed', sweepOn); }
+    if (e.key==='r' || e.key==='R'){ btnReset.click(); }
+  });
+
+  function lerp(a,b,t){ return a+(b-a)*t; }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+  let gl, prog, bufPos, bufNor, bufIdx, uMVP, uNormalM, uLight, uColor, uBeat, uRotate;
+  let idxCount = 0; let rot = 0;
+
+  function glCreateShader(type, src){ const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+  function glCreateProgram(vs, fs){ const p = gl.createProgram(); gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
+    if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); return p; }
+
+  function setup3D(){
+    if (!heart3d) return;
+    gl = heart3d.getContext('webgl', { antialias:true, alpha:false, depth:true });
+    if (!gl) return;
+    const vs = glCreateShader(gl.VERTEX_SHADER, `
+      precision mediump float; attribute vec3 aPos; attribute vec3 aNor;
+      uniform mat4 uMVP; uniform mat3 uNormalM; uniform float uBeat; uniform float uRotate;
+      varying vec3 vN; void main(){
+        float s = 1.0 + 0.08*uBeat; float c = cos(uRotate), sR = sin(uRotate);
+        vec3 p = vec3(aPos.x*c + aPos.z*sR, aPos.y, -aPos.x*sR + aPos.z*c) * s;
+        vN = normalize(uNormalM * aNor); gl_Position = uMVP * vec4(p,1.0);
+      }`);
+    const fs = glCreateShader(gl.FRAGMENT_SHADER, `
+      precision mediump float; varying vec3 vN; uniform vec3 uLight; uniform vec3 uColor;
+      void main(){ vec3 N = normalize(vN); float diff = max(dot(N, normalize(uLight)), 0.0);
+        float rim = pow(1.0 - max(dot(N, vec3(0.0,0.0,1.0)), 0.0), 2.0);
+        vec3 col = uColor*(0.2 + 0.8*diff) + vec3(1.0)*rim*0.15; gl_FragColor = vec4(col,1.0); }`);
+    prog = glCreateProgram(vs, fs); gl.useProgram(prog);
+    uMVP = gl.getUniformLocation(prog, 'uMVP'); uNormalM = gl.getUniformLocation(prog, 'uNormalM');
+    uLight = gl.getUniformLocation(prog, 'uLight'); uColor = gl.getUniformLocation(prog, 'uColor');
+    uBeat = gl.getUniformLocation(prog, 'uBeat'); uRotate = gl.getUniformLocation(prog, 'uRotate');
+
+    const segU = 56, segV = 44; const pos=[], nor=[], idx=[];
+    for (let v=0; v<=segV; v++){
+      const vv = v/segV; const phi = vv*Math.PI;
+      for (let u=0; u<=segU; u++){
+        const uu = u/segU; const th = uu*Math.PI*2.0;
+        let x = Math.sin(phi)*Math.cos(th);
+        let y = Math.cos(phi);
+        let z = Math.sin(phi)*Math.sin(th);
+        const pinch = Math.max(0.0, y);
+        const cleft = Math.pow(Math.abs(Math.atan2(z,x))/3.1415, 1.2) * pinch;
+        x *= (1.0 - 0.25*pinch) - 0.12*cleft; z *= (1.0 - 0.25*pinch); y *= 1.15 - 0.25*pinch;
+        if (y<0.0){ const k = -y; x *= 1.0 + 0.15*k; z *= 1.0 + 0.10*k; y *= 1.0 + 0.05*k; }
+        const len = Math.hypot(x,y,z) || 1.0; pos.push(x,y,z); nor.push(x/len,y/len,z/len);
+      }
+    }
+    for (let v=0; v<segV; v++){
+      for (let u=0; u<segU; u++){
+        const i0 = v*(segU+1)+u, i1 = i0+1, i2 = i0+(segU+1), i3 = i2+1;
+        idx.push(i0,i2,i1, i1,i2,i3);
+      }
+    }
+    idxCount = idx.length;
+    bufPos = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufPos); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pos), gl.STATIC_DRAW);
+    bufNor = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufNor); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(nor), gl.STATIC_DRAW);
+    bufIdx = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bufIdx); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+
+    const aPos = gl.getAttribLocation(prog,'aPos'); gl.bindBuffer(gl.ARRAY_BUFFER, bufPos); gl.vertexAttribPointer(aPos,3,gl.FLOAT,false,0,0); gl.enableVertexAttribArray(aPos);
+    const aNor = gl.getAttribLocation(prog,'aNor'); gl.bindBuffer(gl.ARRAY_BUFFER, bufNor); gl.vertexAttribPointer(aNor,3,gl.FLOAT,false,0,0); gl.enableVertexAttribArray(aNor);
+
+    gl.enable(gl.DEPTH_TEST);
+  }
+
+  function m4mul(a,b){ const o=new Float32Array(16);
+    for(let i=0;i<4;i++){
+      for(let j=0;j<4;j++){
+        o[i*4+j]=a[i*4+0]*b[0*4+j]+a[i*4+1]*b[1*4+j]+a[i*4+2]*b[2*4+j]+a[i*4+3]*b[3*4+j];
+      }
+    }
+    return o;
+  }
+  function m4identity(){ const m=new Float32Array(16); m[0]=m[5]=m[10]=m[15]=1; return m; }
+  function m4persp(fovy,aspect,near,far){ const f=1/Math.tan(fovy/2.0), m=new Float32Array(16); m[0]=f/aspect; m[5]=f; m[10]=(far+near)/(near-far); m[11]=-1; m[14]=(2*far*near)/(near-far); return m; }
+  function m4translate(tx,ty,tz){ const m=m4identity(); m[12]=tx; m[13]=ty; m[14]=tz; return m; }
+  function m3fromMat4(m){ return new Float32Array([m[0],m[1],m[2], m[4],m[5],m[6], m[8],m[9],m[10]]); }
+
+  function render3D(t){
+    if (!gl || !show3D) return;
+    gl.viewport(0,0,heart3d.width, heart3d.height);
+    gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(prog);
+
+    const aspect = heart3d.width/heart3d.height;
+    const P = m4persp(0.9, aspect, 0.1, 10.0);
+    const V = m4translate(0,0,-2.3);
+    const M = m4identity();
+    const MVP = m4mul(P, m4mul(V, M));
+
+    rot += 0.008;
+    gl.uniformMatrix4fv(uMVP,false,MVP);
+    gl.uniformMatrix3fv(uNormalM,false,m3fromMat4(M));
+    gl.uniform3f(uLight, -0.6, 0.7, 0.5);
+    gl.uniform3f(uColor, 0.88, 0.18, 0.28);
+    gl.uniform1f(uBeat, Math.max(0.0, Math.sin(state.phase*6.28318)));
+    gl.uniform1f(uRotate, rot);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bufIdx);
+    gl.drawElements(gl.TRIANGLES, idxCount, gl.UNSIGNED_SHORT, 0);
+  }
+
+  function heartPath(g, cx, cy, size, phase){
+    const systole = Math.sin(phase*2*Math.PI);
+    const contract = 0.12 + 0.10*Math.max(0, systole);
+    const scale = 1 - contract;
+    g.save(); g.translate(cx, cy); g.scale(scale, scale*lerp(1,0.96,Math.max(0, systole)));
+    g.beginPath(); const w = size, h = size*1.15;
+    g.moveTo(0, -h*0.42);
+    g.bezierCurveTo(w*0.55, -h*0.95,  w*0.95, -h*0.05,  0,  h*0.58);
+    g.bezierCurveTo(-w*0.95, -h*0.05, -w*0.55, -h*0.95, 0, -h*0.42);
+    g.closePath(); g.clip();
+    const septumX = 0; const baseY = -h*0.18; const apexY = h*0.50;
+    g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 2; g.beginPath();
+    g.moveTo(septumX, baseY); g.lineTo(septumX, apexY);
+    g.moveTo(-w*0.48, baseY-2); g.lineTo(w*0.48, baseY+2); g.stroke();
+    g.restore();
+  }
+
+  let sweepAngle = 0;
+  function renderBMode(g, t, bpm, opts){
+    const { gain=1, speck=1, depth=1, doppler=false, sweep=true } = opts;
+    const W = canvas.clientWidth, H = canvas.clientHeight;
+
+    g.globalCompositeOperation = 'source-over';
+    g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(0,0,W,H);
+
+    const cx = W*0.50; const cy = H*0.20 + (1.3 - depth)*60;
+    const radius = Math.min(W, H)*0.70; const sector = Math.PI * 0.85;
+    sweepAngle = (sweepAngle + (sweep? 0.015 : 0)) % sector;
+
+    const lines = 160, dr = radius / 160;
+    g.save(); g.beginPath(); g.moveTo(cx, cy);
+    g.arc(cx, cy, radius, Math.PI/2 - sector/2, Math.PI/2 + sector/2); g.closePath(); g.clip();
+
+    for (let i = 0; i < lines; i++){
+      const a = (Math.PI/2 - sector/2) + ((i + (sweep?sweepAngle*180/Math.PI:0)) % lines)/lines * sector;
+      for (let r = 8; r < radius; r += dr){
+        const x = cx + Math.cos(a) * r; const y = cy + Math.sin(a) * r;
+        const dx = (x - cx); const dy = (y - (cy + radius*0.25));
+        const dist = Math.hypot(dx*0.9, dy*1.05);
+        const heartFactor = clamp(1.0 - dist / (radius*0.55), 0, 1);
+        const edge = heartFactor>0 ? (1.0 - heartFactor) : 1.0;
+        const wallEcho = Math.pow(1.0 - Math.abs(edge-0.35), 2.5);
+        const noise = (Math.random()*2 - 1) * 0.14 * (speck/100);
+        const flicker = (Math.sin((t*0.002 + r*0.01) + i*0.05) * 0.5 + 0.5) * 0.08;
+        let val = (noise + wallEcho*0.55 + heartFactor*0.12 + flicker) * (gain/120);
+        if (val>0.02){
+          g.strokeStyle = `rgba(230,238,245,${Math.max(0, Math.min(0.95, val))})`;
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a)*dr*0.9, y + Math.sin(a)*dr*0.9); g.stroke();
+        }
+        if (doppler && r>radius*0.25 && r<radius*0.55){
+          const flow = Math.sin(t*0.008 + a*3 + r*0.02); const mag = Math.pow(Math.abs(flow), 2.0) * 0.8;
+          g.fillStyle = flow>0 ? `rgba(239,68,68,${0.14*mag})` : `rgba(59,130,246,${0.14*mag})`;
+          g.fillRect(x-0.8, y-0.8, 1.6, 1.6);
+        }
+      }
+    }
+    g.restore();
+
+    g.save(); g.globalCompositeOperation = 'lighter'; g.strokeStyle = 'rgba(255,255,255,0.08)'; g.lineWidth = 2;
+    heartPath(g, W*0.50, H*0.62, Math.min(W,H)*0.23, state.phase); g.stroke(); g.restore();
+
+    if (sweep){ g.save(); g.globalCompositeOperation = 'screen'; g.strokeStyle = 'rgba(110,231,255,0.4)'; g.lineWidth = 2;
+      const a0 = (Math.PI/2 - sector/2) + (sweepAngle/sector)*sector; g.beginPath(); g.moveTo(cx, cy);
+      g.lineTo(cx + Math.cos(a0)*radius, cy + Math.sin(a0)*radius); g.stroke(); g.restore(); }
+
+    g.save(); g.fillStyle = '#eab308'; g.strokeStyle = '#eab308'; g.lineWidth = 1;
+    for (let i=0;i<calipers.length;i++){
+      const p = calipers[i]; g.beginPath(); g.arc(p.x, p.y, 3, 0, Math.PI*2); g.fill();
+      if (i%2===1){ const q = calipers[i-1]; g.beginPath(); g.moveTo(q.x,q.y); g.lineTo(p.x,p.y); g.stroke();
+        const d = Math.hypot(p.x-q.x, p.y-q.y); g.fillStyle='#fef08a'; g.fillText(d.toFixed(1)+' px', (p.x+q.x)/2+6, (p.y+q.y)/2-6); }
+    }
+    g.restore();
+  }
+
+  function renderEKG(t, bpm){
+    const W = ekg.clientWidth, H = ekg.clientHeight;
+    ectx.fillStyle = '#000'; ectx.fillRect(0,0,W,H); ectx.strokeStyle = 'rgba(39, 174, 96, 0.9)'; ectx.lineWidth = 2;
+    const secsPerBeat = 60 / bpm; const phase = ((t/1000) % secsPerBeat) / secsPerBeat;
+    const qrs = Math.exp(-Math.pow((phase-0.15)/0.015,2))*1.0;
+    const p = Math.exp(-Math.pow((phase-0.05)/0.03,2))*0.25;
+    const tW = Math.exp(-Math.pow((phase-0.35)/0.05,2))*0.4;
+    const v = (p + qrs*1.8 + tW*0.7) - 0.08; ekgBuf[ekgWrite] = v; ekgWrite = (ekgWrite+1) % ekgBuf.length;
+    ectx.beginPath();
+    for (let i=0;i<W;i++){
+      const idx = (ekgWrite - (W-i) + ekgBuf.length) % ekgBuf.length;
+      const y = H*0.5 - ekgBuf[idx]*H*0.35;
+      if (i===0) ectx.moveTo(i,y); else ectx.lineTo(i,y);
+    }
+    ectx.stroke();
+  }
+
+  function updatePhase(t, bpm){ const dt = (t - state.t0)/1000; state.t0 = t; const spb = 60 / bpm; state.phase = (state.phase + dt / spb) % 1; }
+
+  function drawHUD(bpm){
+    hud.innerHTML = `
+      <div><strong>${Math.round(bpm)} BPM</strong></div>
+      <div style="color:#94a3b8">Gain ${gain.value} • Depth ${depth.value}% • Speckle ${speckle.value}${doppler?' • Doppler ON':''}${sweepOn?' • Sweep':''}${frozen?' • Frozen':''}${show3D?' • 3D':''}</div>
+      <div style="margin-top:4px;color:#a1a1aa">Cine frames: ${state.cine.length.toString().padStart(3,'&nbsp;')}  ${state.scrub>=0?'(scrubbing)':''}</div>`;
+  }
+
+  function frame(t){
+    const bpm = parseFloat(rate.value);
+    if (!frozen) updatePhase(t, bpm);
+    renderEKG(t, bpm);
+    renderBMode(ctx, t, bpm, { gain: parseFloat(gain.value), speck: parseFloat(speckle.value), depth: parseFloat(depth.value)/100, doppler, sweep: sweepOn });
+
+    if (!frozen){
+      const W = canvas.clientWidth, H = canvas.clientHeight;
+      const img = ctx.getImageData(0,0,Math.min(360,W),Math.min(220,H));
+      state.cine.push(img);
+      if (state.cine.length>state.cineLen) state.cine.shift();
+    }
+
+    drawHUD(bpm);
+    render3D(t);
+
+    if (state.scrub>=0 && state.cine.length>0){
+      const img = state.cine[state.scrub|0];
+      if (img){ ctx.putImageData(img, 0, 0); }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  try { setup3D(); } catch(e) { console.error(e); }
+  requestAnimationFrame(frame);
+
+  function assert(msg, cond){ if(!cond) throw new Error(msg); }
+  function runSelfTests(){
+    const results = [];
+    try {
+      const d0 = doppler; btnDoppler.click(); assert('Doppler toggle failed', doppler!==d0); btnDoppler.click();
+      const s0 = sweepOn; btnSweep.click(); assert('Sweep toggle failed', sweepOn!==s0); btnSweep.click();
+      const f0 = frozen; btnFreeze.click(); assert('Freeze toggle failed', frozen!==f0); btnFreeze.click();
+      const g0 = show3D; btn3D.click(); assert('3D toggle failed', show3D!==g0); btn3D.click();
+      results.push('UI toggles ✓');
+      const wBefore = canvas.width; fit(); assert('Resize did not set canvas width', canvas.width>0 && canvas.width==canvas.width);
+      results.push('Resize ✓');
+      if (heart3d){ const testGl = heart3d.getContext('webgl'); assert('WebGL context unavailable', !!testGl); }
+      results.push('WebGL ✓');
+      const p0 = state.phase; setTimeout(()=>{ const ok = state.phase!==p0 || frozen; results.push(`Loop ${(ok?'✓':'?')}`); diagEl.textContent = 'Diagnostics: ' + results.join(' · '); }, 60);
+      diagEl.textContent = 'Diagnostics: ' + results.join(' · ');
+    } catch(e){ diagEl.textContent = 'Diagnostics: ERROR — ' + e.message; console.error(e); }
+  }
+  runSelfTests();
+})();
+</script>
+</body>
+</html>
