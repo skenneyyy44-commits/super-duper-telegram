@@ -723,9 +723,10 @@
     const regionBounds = [
       { name: 'Japan & Kurils', lat: [20, 60], lon: [120, 170] },
       { name: 'US West / Alaska', lat: [25, 72], lon: [-180, -100] },
+      // Match US East before the broader Mexico box where their bounds overlap.
+      { name: 'US East / Carolinas', lat: [30, 40], lon: [-90, -70] },
       { name: 'Mexico & Central America', lat: [0, 35], lon: [-120, -70] },
-      { name: 'Caribbean / Puerto Rico', lat: [0, 30], lon: [-90, -50] },
-      { name: 'US East / Carolinas', lat: [30, 40], lon: [-90, -70] }
+      { name: 'Caribbean / Puerto Rico', lat: [0, 30], lon: [-90, -50] }
     ];
 
     function classifyRegion(lat, lon) {
