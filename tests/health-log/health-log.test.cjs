@@ -11,7 +11,7 @@ const image = 'data:image/png;base64,AA==';
 
 // Render the actual component with React. Replace only external I/O and visual
 // wrappers; no hooks, save handlers, state transitions, or JSX are copied here.
-async function mount(t) {
+async function mount(t, options = {}) {
   const writes = [];
   const pending = [];
   let closes = 0;
@@ -24,7 +24,7 @@ async function mount(t) {
       return new Promise((resolve, reject) => pending.push({ resolve, reject }));
     },
     Timestamp: { now: () => timestamp },
-    fileToBase64: async () => image,
+    fileToBase64: options.fileToBase64 || (async () => image),
     getAiHealthAnalysis: async () => analysis,
     resolveAppId: () => 'test-app',
   };
@@ -57,7 +57,8 @@ async function mount(t) {
   t.after(async () => {
     try { if (renderer) await act(async () => renderer.unmount()); }
     finally { console.error = originalError; }
-    assert.ok(errors.every(args => args[0] === 'Failed to save health log'), 'unexpected React or component error');
+    const allowed = new Set(['Failed to save health log', 'Failed to process image']);
+    assert.ok(errors.every(args => allowed.has(args[0])), 'unexpected React or component error');
   });
   await act(async () => {
     renderer = create(React.createElement(mod.exports.HealthLogModal, {
@@ -123,4 +124,15 @@ test('save failure without an error message displays the fallback', async t => {
   await act(async () => { app.pending[0].reject({ code: 'unavailable' }); await promise; });
   assert.match(app.message(), /Unable to save this log\. Please try again\./);
   assert.equal(app.closes(), 0);
+});
+
+test('an unreadable photo tells the user instead of failing silently', async t => {
+  const app = await mount(t, {
+    fileToBase64: async () => { throw new Error('bad file'); },
+  });
+  await act(async () => {
+    app.renderer.root.find((node) => node.props.onFileSelected).props.onFileSelected({});
+  });
+  assert.match(app.message(), /We were unable to read that file/);
+  assert.equal(app.button('Save to log').props.disabled, true);
 });

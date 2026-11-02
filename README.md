@@ -16,7 +16,7 @@ function App() {
 }
 ```
 
-The map loads data on mount. Each layer has a checkbox, and "Fly the corridor" plays a short camera path. While the live request is in flight the stat cards show "…". After it finishes they show the real numbers, including zero.
+The map loads data on mount. Each layer has a checkbox, and "Fly the corridor" plays a short camera path. While the live request is in flight the stat cards show "…". After a successful fetch they show the real numbers, including zero. If the request fails, the cards show "—" instead of zero, and the error is shown along the bottom of the map.
 
 ## Plant tracker
 

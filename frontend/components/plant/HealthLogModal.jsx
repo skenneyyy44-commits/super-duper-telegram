@@ -20,6 +20,7 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
   const [previewImage, setPreviewImage] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const [fileError, setFileError] = useState(null);
   const [{ status: aiStatus, payload: aiPayload, error: aiError }, setAiState] =
     useState(initialAiState);
   const abortControllerRef = useRef(null);
@@ -35,10 +36,12 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
   );
 
   const handleFileSelected = useCallback(async (file) => {
+    setFileError(null);
     try {
       setPreviewImage(await fileToBase64(file));
-    } catch (fileError) {
-      console.error('Failed to process image', fileError);
+    } catch (readError) {
+      console.error('Failed to process image', readError);
+      setFileError('We were unable to read that file. Please try a different image.');
     }
   }, []);
 
@@ -103,6 +106,8 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
           onFileSelected={handleFileSelected}
           required
         />
+
+        {fileError && <p className="text-sm text-red-600">{fileError}</p>}
 
         <div>
           <label className="block mb-2 text-sm font-semibold text-gray-700">Notes</label>
