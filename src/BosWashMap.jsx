@@ -32,6 +32,14 @@ const CITIES = [
 // Bounding box roughly covering DC→Boston corridor [west, south, east, north]
 const BBOX = [-77.8, 38.6, -70.4, 42.9];
 
+// "…" while the request is in flight, "—" if it failed, otherwise the measured value.
+function formatLiveStat(value, { loading, failed, unit } = {}) {
+  if (loading) return "…";
+  if (failed || value == null || Number.isNaN(value)) return "—";
+  const text = Number(value).toLocaleString();
+  return unit ? `${text} ${unit}` : text;
+}
+
 // Helper: call Overpass API (OpenStreetMap) with abort support
 async function overpass(query, signal) {
   const endpoint = "https://overpass-api.de/api/interpreter";
@@ -278,7 +286,7 @@ export default function BosWashMap() {
             m.addLayer({ id: "airports-labels", type: "symbol", source: "airports", layout: { "text-field": ["format", ["get", "iata"], { "font-scale": 1.1 }, "\n", {}, ["coalesce", ["get", "name"], "Airport"], { "font-scale": 0.8 }], "text-offset": [0, 1.2], "text-anchor": "top", "text-size": 12 }, paint: { "text-color": "#ffd8a6", "text-halo-color": "#1a1206", "text-halo-width": 1.2 } });
           }
 
-          // Stats (safe even if any layer fetch fails)
+          // Publish stats only after every live layer returns. A failure leaves them unset.
           const i95Miles = Math.round(turf.length(i95FC, { units: "miles" }));
           const corridorMiles = Math.round(turf.length(corridor, { units: "miles" }));
           setStats({ i95Miles, corridorMiles, amtrakCount: amtrakFC.features.length, airportCount: airportFC.features.length });
@@ -364,23 +372,23 @@ export default function BosWashMap() {
             <span className="text-[10px] text-sky-300/70">DC → BAL → PHL → NYC → HFD → PVD → BOS</span>
           </div>
 
-          {/* Stats */}
+          {/* Stats. Zeros are real measurements. A failed request must not look like zero. */}
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="rounded-xl bg-sky-900/20 px-3 py-2 ring-1 ring-sky-900/40">
               <div className="text-[11px] text-sky-300/80">I‑95 (within box)</div>
-              <div className="text-sky-100 text-base font-bold">{loading ? "…" : `${stats.i95Miles.toLocaleString()} mi`}</div>
+              <div className="text-sky-100 text-base font-bold">{formatLiveStat(stats.i95Miles, { loading, failed: Boolean(error), unit: "mi" })}</div>
             </div>
             <div className="rounded-xl bg-sky-900/20 px-3 py-2 ring-1 ring-sky-900/40">
               <div className="text-[11px] text-sky-300/80">Direct corridor</div>
-              <div className="text-sky-100 text-base font-bold">{loading ? "…" : `${stats.corridorMiles.toLocaleString()} mi`}</div>
+              <div className="text-sky-100 text-base font-bold">{formatLiveStat(stats.corridorMiles, { loading, failed: Boolean(error), unit: "mi" })}</div>
             </div>
             <div className="rounded-xl bg-emerald-900/20 px-3 py-2 ring-1 ring-emerald-900/40">
               <div className="text-[11px] text-emerald-300/80">Amtrak stations</div>
-              <div className="text-emerald-100 text-base font-bold">{loading ? "…" : stats.amtrakCount.toLocaleString()}</div>
+              <div className="text-emerald-100 text-base font-bold">{formatLiveStat(stats.amtrakCount, { loading, failed: Boolean(error) })}</div>
             </div>
             <div className="rounded-xl bg-amber-900/20 px-3 py-2 ring-1 ring-amber-900/40">
               <div className="text-[11px] text-amber-300/80">Airports (IATA)</div>
-              <div className="text-amber-100 text-base font-bold">{loading ? "…" : stats.airportCount.toLocaleString()}</div>
+              <div className="text-amber-100 text-base font-bold">{formatLiveStat(stats.airportCount, { loading, failed: Boolean(error) })}</div>
             </div>
           </div>
 

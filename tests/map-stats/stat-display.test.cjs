@@ -7,6 +7,7 @@ const { create, act } = require('react-test-renderer');
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const LOADING = '…';
+const UNAVAILABLE = '—';
 
 const originalSetTimeout = global.setTimeout;
 global.setTimeout = (fn, delay, ...args) => {
@@ -163,4 +164,56 @@ test('a finished count of zero is shown as zero, while loading stays a placehold
     (0).toLocaleString(),
     (1).toLocaleString(),
   ]);
+});
+
+test('a failed live-data request shows an unavailable state instead of zero', async (t) => {
+  const BosWashMap = await loadMap();
+  const originalFetch = global.fetch;
+  const originalError = console.error;
+  globalThis.__boswashFetches = [];
+  global.fetch = (_url, opts) => new Promise((resolve, reject) => {
+    if (opts?.signal?.aborted) {
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      reject(error);
+      return;
+    }
+    globalThis.__boswashFetches.push(() => reject(new Error('Overpass unavailable')));
+  });
+  console.error = (...args) => {
+    if (String(args[0]).startsWith('react-test-renderer is deprecated')) return;
+    if (args[0] instanceof Error && args[0].message === 'Overpass unavailable') return;
+    originalError(...args);
+  };
+
+  let renderer;
+  t.after(async () => {
+    try {
+      if (renderer) await act(async () => renderer.unmount());
+    } finally {
+      global.fetch = originalFetch;
+      console.error = originalError;
+      delete globalThis.__boswashMap;
+      delete globalThis.__boswashFetches;
+    }
+  });
+
+  await act(async () => {
+    renderer = create(React.createElement(BosWashMap));
+  });
+  await act(async () => {
+    globalThis.__boswashMap.emit('load');
+  });
+  assert.deepEqual(statText(renderer), [LOADING, LOADING, LOADING, LOADING]);
+
+  await act(async () => {
+    const pending = globalThis.__boswashFetches.splice(0);
+    for (const rejectFetch of pending) rejectFetch();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  assert.deepEqual(statText(renderer), [UNAVAILABLE, UNAVAILABLE, UNAVAILABLE, UNAVAILABLE]);
+  assert.match(JSON.stringify(renderer.toJSON()), /Overpass unavailable/);
+  assert.equal(statText(renderer).some((value) => value.includes('0')), false);
 });
