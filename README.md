@@ -12,7 +12,7 @@ npm install
 npm run dev
 ```
 
-Vite serves the dev UI at http://localhost:5173. `npm run build` writes the production bundle to `static/wave-simulator/`, which Flask serves at http://localhost:5000/wave-simulator/index.html. That folder is separate from the other files in `static/`, so a build does not remove the earthquake laboratory or the black-hole page.
+Vite serves the dev UI at http://localhost:5173. `npm run build` writes the production bundle to `static/wave-simulator/`, which Flask serves at http://localhost:5000/wave-simulator/index.html. That folder is separate from the other files in `static/`, so a build does not remove the earthquake laboratory, the black-hole page, or the Earth Risk Sentinel dashboard.
 
 ## BosWash map
 
@@ -57,12 +57,14 @@ Open http://localhost:8080/physix-lab.html.
 
 ## Earth Risk Sentinel
 
-`earth_risk_sentinel.html` is a USGS earthquake dashboard. Open http://localhost:8080/earth_risk_sentinel.html.
+`earth_risk_sentinel.html` is a USGS earthquake dashboard with regional filters, an energy index, and a Leaflet map. With the same static server running, open http://localhost:8080/earth_risk_sentinel.html. Use the region buttons to limit the stats and the map to that belt. A real mean magnitude includes zero and negative values; missing magnitudes are left out.
 
 ## Tests
 
 ```bash
 cd frontend && npm ci && npm run build
+cd tests/health-log && npm ci && npm test
+cd tests/map-stats && npm ci && npm test
 node --test tests/seismic-dpr.test.mjs tests/test_physix_lab.cjs tests/earth_risk_regions.test.cjs
 python3 -m pytest tests/ -q
 ```
