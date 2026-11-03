@@ -2,6 +2,7 @@ import json
 import os
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import unquote
+from commute_demo import generate_commute_demo
 
 
 def _fully_unquote(value: str) -> str:
@@ -274,6 +275,16 @@ def create_app():
     @app.route('/healthz')
     def health():
         return jsonify({"ok": True})
+
+    @app.route('/api/commute/demo')
+    def commute_demo():
+        """Return explicitly synthetic commute data, not live conditions."""
+        return jsonify(generate_commute_demo())
+
+    @app.route('/api/commute')
+    def live_commute_unavailable():
+        """Reject live-commute requests rather than returning an SPA as HTTP 200."""
+        return "Live commute data unavailable; synthetic demo: /api/commute/demo", 501
 
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
