@@ -17,15 +17,26 @@ def test_healthz():
 
 def test_static_index_served(tmp_path):
     flask_app = create_app()
-    static_folder = flask_app.static_folder
-    os.makedirs(static_folder, exist_ok=True)
-    index_path = os.path.join(static_folder, 'index.html')
-    with open(index_path, 'w', encoding='utf-8') as f:
-        f.write('ok')
+    real_index = os.path.join(flask_app.static_folder, 'index.html')
+    before = None
+    if os.path.isfile(real_index):
+        with open(real_index, 'rb') as handle:
+            before = handle.read()
+
+    static_dir = tmp_path / 'static'
+    static_dir.mkdir()
+    index_path = static_dir / 'index.html'
+    index_path.write_text('ok', encoding='utf-8')
+    flask_app.static_folder = str(static_dir)
+
     client = flask_app.test_client()
     resp = client.get('/')
     assert resp.status_code == 200
-    os.remove(index_path)
+    assert resp.get_data(as_text=True) == 'ok'
+    assert index_path.read_text(encoding='utf-8') == 'ok'
+    if before is not None:
+        with open(real_index, 'rb') as handle:
+            assert handle.read() == before
 
 
 def test_db_dir_exists():
