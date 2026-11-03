@@ -1,6 +1,71 @@
 import json
 import os
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from urllib.parse import unquote
+
+
+def _fully_unquote(value: str) -> str:
+    """Decode percent-escapes, including repeated encodings of ``..`` and separators."""
+    decoded = value
+    for _ in range(8):
+        unquoted = unquote(decoded)
+        if unquoted == decoded:
+            break
+        decoded = unquoted
+    return decoded.replace("\\", "/")
+
+
+def _is_inside_directory(root: str, candidate: str) -> bool:
+    try:
+        return os.path.commonpath([root, candidate]) == root
+    except ValueError:
+        return False
+
+
+def _classify_static_path(static_folder: str, requested_path: str) -> Tuple[str, Optional[str]]:
+    """Classify a static path after normalization.
+
+    Returns ``("file", absolute_path)`` for a regular file that stays inside
+    ``static_folder``. Returns ``("missing", None)`` when the normalized path
+    stays inside but is not a file. Returns ``("reject", None)`` for traversal,
+    encoded ``..``, absolute paths, symlink escapes, and directories.
+    """
+    if not static_folder:
+        return "reject", None
+
+    try:
+        static_root = os.path.realpath(static_folder)
+    except OSError:
+        return "reject", None
+
+    decoded = _fully_unquote(requested_path or "")
+    if "\x00" in decoded or os.path.isabs(decoded) or decoded.startswith("/"):
+        return "reject", None
+    if decoded == "":
+        return "missing", None
+
+    try:
+        real_candidate = os.path.realpath(os.path.join(static_root, decoded))
+    except OSError:
+        return "reject", None
+
+    if not _is_inside_directory(static_root, real_candidate):
+        return "reject", None
+    if os.path.isfile(real_candidate):
+        return "file", real_candidate
+    if os.path.isdir(real_candidate):
+        return "reject", None
+    return "missing", None
+
+
+def _send_resolved_static_file(static_folder: str, absolute_file: str) -> Any:
+    """Serve a file already known to live inside ``static_folder``."""
+    static_root = os.path.realpath(static_folder)
+    relative = os.path.relpath(absolute_file, static_root)
+    if relative.startswith("..") or os.path.isabs(relative):
+        return "Not Found", 404
+    return send_from_directory(static_root, relative)
+
 
 try:  # pragma: no cover - exercised indirectly in tests
     from flask import Flask, jsonify, send_from_directory  # type: ignore
@@ -20,17 +85,23 @@ except ModuleNotFoundError:  # pragma: no cover - exercised indirectly in tests
             json_body: bool = False,
         ) -> None:
             self.status_code = status
-            self.headers: Dict[str, str] = headers or {}
+            self.headers: Dict[str, str] = dict(headers or {})
             self._json: Optional[Any] = body if json_body else None
 
             if isinstance(body, bytes):
                 payload = body
             elif json_body:
                 payload = json.dumps(body).encode("utf-8")
+                self.headers.setdefault("Content-Type", "application/json")
             else:
                 payload = str(body).encode("utf-8")
 
+            self.headers.setdefault("Content-Length", str(len(payload)))
             self.data = payload
+            self.content_type = self.headers.get("Content-Type", "")
+            self.mimetype = self.content_type.split(";", 1)[0].strip()
+            length = self.headers.get("Content-Length")
+            self.content_length = int(length) if length is not None and str(length).isdigit() else None
 
         def get_json(self) -> Any:
             if self._json is None:
@@ -162,10 +233,10 @@ except ModuleNotFoundError:  # pragma: no cover - exercised indirectly in tests
         return SimpleResponse(payload, json_body=True)
 
     def send_from_directory(directory: str, filename: str) -> SimpleResponse:  # type: ignore[misc]
-        file_path = os.path.join(directory, filename)
-        if not os.path.isfile(file_path):
+        kind, resolved = _classify_static_path(directory, filename)
+        if kind != "file" or resolved is None:
             return SimpleResponse("File not found", status=404)
-        with open(file_path, "rb") as fh:
+        with open(resolved, "rb") as fh:
             return SimpleResponse(fh.read(), status=200)
 
 
@@ -210,12 +281,15 @@ def create_app():
         static_folder = app.static_folder
         if not static_folder or not os.path.isdir(static_folder):
             return "Static folder not configured", 404
-        requested = os.path.join(static_folder, path)
-        if path and os.path.exists(requested):
-            return send_from_directory(static_folder, path)
-        index_path = os.path.join(static_folder, 'index.html')
-        if os.path.exists(index_path):
-            return send_from_directory(static_folder, 'index.html')
+        if path:
+            kind, resolved = _classify_static_path(static_folder, path)
+            if kind == "reject":
+                return "Not Found", 404
+            if kind == "file" and resolved:
+                return _send_resolved_static_file(static_folder, resolved)
+        index_kind, index_file = _classify_static_path(static_folder, "index.html")
+        if index_kind == "file" and index_file:
+            return _send_resolved_static_file(static_folder, index_file)
         return "index.html not found", 404
 
     @app.teardown_appcontext
