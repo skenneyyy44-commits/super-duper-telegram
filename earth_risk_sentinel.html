@@ -993,7 +993,9 @@
       globalStats.todayNote = activeMode === 'GLOBAL' ? 'USGS all magnitudes • 24h feed' : 'USGS all magnitudes in this belt • 24h';
       globalStats.weekNote = 'USGS all magnitudes • 7-day global feed';
 
-      const magnitudes = filteredDay.map((f) => f.properties.mag || 0).filter((mag) => mag > 0);
+      const magnitudes = filteredDay
+        .map((feature) => feature.properties?.mag)
+        .filter((mag) => typeof mag === 'number' && Number.isFinite(mag));
       const meanMag = magnitudes.length ? (magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length).toFixed(1) : '—';
       globalStats.meanMagnitude = meanMag;
 

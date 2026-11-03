@@ -19,17 +19,29 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
   const [userNotes, setUserNotes] = useState('');
   const [previewImage, setPreviewImage] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const [fileError, setFileError] = useState(null);
   const [{ status: aiStatus, payload: aiPayload, error: aiError }, setAiState] =
     useState(initialAiState);
   const abortControllerRef = useRef(null);
 
   const canAnalyze = useMemo(() => Boolean(previewImage) && aiStatus !== 'loading', [previewImage, aiStatus]);
+  const potentialIssues = useMemo(
+    () => (Array.isArray(aiPayload?.potential_issues) ? aiPayload.potential_issues : []),
+    [aiPayload],
+  );
+  const careRecommendations = useMemo(
+    () => (Array.isArray(aiPayload?.care_recommendations) ? aiPayload.care_recommendations : []),
+    [aiPayload],
+  );
 
   const handleFileSelected = useCallback(async (file) => {
+    setFileError(null);
     try {
       setPreviewImage(await fileToBase64(file));
-    } catch (fileError) {
-      console.error('Failed to process image', fileError);
+    } catch (readError) {
+      console.error('Failed to process image', readError);
+      setFileError('We were unable to read that file. Please try a different image.');
     }
   }, []);
 
@@ -65,6 +77,7 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
       return;
     }
     setIsSaving(true);
+    setSaveError(null);
 
     try {
       const path = `/artifacts/${appId}/users/${userId}/plants/${plantId}/healthLogs`;
@@ -75,8 +88,9 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
         createdAt: Timestamp.now(),
       });
       onClose();
-    } catch (saveError) {
-      console.error('Failed to save health log', saveError);
+    } catch (error) {
+      console.error('Failed to save health log', error);
+      setSaveError(error);
     } finally {
       setIsSaving(false);
     }
@@ -92,6 +106,8 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
           onFileSelected={handleFileSelected}
           required
         />
+
+        {fileError && <p className="text-sm text-red-600">{fileError}</p>}
 
         <div>
           <label className="block mb-2 text-sm font-semibold text-gray-700">Notes</label>
@@ -138,23 +154,28 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
               <span className="font-semibold text-gray-900">Species:</span> {aiPayload.plant_species || 'Not identified'}
             </p>
             <p className="text-sm text-gray-700">
-              <span className="font-semibold text-gray-900">Summary:</span> {aiPayload.health_summary}
+              <span className="font-semibold text-gray-900">Summary:</span>{' '}
+              {aiPayload.health_summary || 'No summary available yet.'}
             </p>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <h4 className="text-sm font-semibold text-red-700 uppercase">Potential issues</h4>
                 <ul className="mt-2 space-y-1 text-sm text-red-700 list-disc list-inside">
-                  {aiPayload.potential_issues.map((issue, index) => (
-                    <li key={index}>{issue}</li>
-                  ))}
+                  {potentialIssues.length > 0 ? (
+                    potentialIssues.map((issue, index) => <li key={index}>{issue}</li>)
+                  ) : (
+                    <li>No issues detected yet.</li>
+                  )}
                 </ul>
               </div>
               <div>
                 <h4 className="text-sm font-semibold text-green-700 uppercase">Care recommendations</h4>
                 <ul className="mt-2 space-y-1 text-sm text-green-700 list-disc list-inside">
-                  {aiPayload.care_recommendations.map((item, index) => (
-                    <li key={index}>{item}</li>
-                  ))}
+                  {careRecommendations.length > 0 ? (
+                    careRecommendations.map((item, index) => <li key={index}>{item}</li>)
+                  ) : (
+                    <li>No recommendations available yet.</li>
+                  )}
                 </ul>
               </div>
             </div>
@@ -162,6 +183,11 @@ export const HealthLogModal = ({ firestore, userId, plantId, onClose }) => {
         )}
 
         <div className="flex justify-end gap-3 pt-4">
+          {saveError && (
+            <p className="mr-auto text-sm text-red-600">
+              {saveError?.message || 'Unable to save this log. Please try again.'}
+            </p>
+          )}
           <button
             type="button"
             onClick={onClose}

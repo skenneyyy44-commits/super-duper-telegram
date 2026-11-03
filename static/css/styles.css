@@ -1,0 +1,207 @@
+:root {
+  color-scheme: dark;
+  --bg: radial-gradient(circle at 30% 20%, #122742, #05070d 60%);
+  --accent: #ff9966;
+  --accent-strong: #ff5e62;
+  --text: #f1f5f9;
+  --muted: #7f8ea3;
+  --panel: rgba(15, 23, 42, 0.72);
+  font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  justify-content: center;
+  padding: 2rem;
+}
+
+#app {
+  width: min(1100px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.hero {
+  text-align: center;
+  background: linear-gradient(135deg, rgba(255, 153, 102, 0.16), rgba(80, 160, 255, 0.12));
+  padding: 2rem;
+  border-radius: 1rem;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.3);
+}
+
+.hero h1 {
+  margin-bottom: 0.5rem;
+  font-size: clamp(2rem, 3vw, 3.25rem);
+  letter-spacing: 0.04em;
+}
+
+main {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 1.5rem;
+}
+
+.controls {
+  background: var(--panel);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.control-group {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.control-group label {
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.control-group input[type='range'] {
+  width: 100%;
+}
+
+.control-group .value {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
+.controls button {
+  padding: 0.8rem 1rem;
+  border: none;
+  border-radius: 0.7rem;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #0b1120;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 15px 40px rgba(255, 94, 98, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.controls button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 45px rgba(255, 94, 98, 0.4);
+}
+
+.visualization {
+  position: relative;
+  background: rgba(8, 12, 24, 0.75);
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.45);
+}
+
+#simulationCanvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: saturate(1.2) contrast(1.1);
+}
+
+.metrics {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem;
+  background: rgba(7, 12, 24, 0.76);
+  border-radius: 0.8rem;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+
+.metric-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.legend {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 160px;
+  background: rgba(7, 12, 24, 0.76);
+  padding: 1rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.legend h2 {
+  margin-top: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+}
+
+.legend .gradient {
+  height: 10px;
+  background: linear-gradient(90deg, #2a9d8f, #e9c46a, #f4a261, #e76f51, #d62828);
+  border-radius: 999px;
+  margin-bottom: 0.5rem;
+}
+
+.city {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 1.5rem;
+  padding-bottom: 1rem;
+  pointer-events: none;
+}
+
+.building {
+  width: 28px;
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.75), rgba(30, 41, 59, 0.9));
+  border-radius: 0.6rem 0.6rem 0.2rem 0.2rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  transition: transform 0.1s ease;
+}
+
+.building::after {
+  content: '';
+  display: block;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  margin: 6px;
+}
+
+footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 960px) {
+  body {
+    padding: 1rem;
+  }
+  main {
+    grid-template-columns: 1fr;
+  }
+  .controls {
+    order: 2;
+  }
+}

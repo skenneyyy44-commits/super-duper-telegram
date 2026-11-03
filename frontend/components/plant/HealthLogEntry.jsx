@@ -2,9 +2,13 @@ import { useState } from 'react';
 import { AlertTriangle, Bot, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatTimestamp } from '../../utils/media';
 
+const asList = (value) => (Array.isArray(value) ? value : []);
+
 export const HealthLogEntry = ({ log }) => {
   const [expanded, setExpanded] = useState(false);
   const toggleExpanded = () => setExpanded((prev) => !prev);
+  const issues = asList(log.aiAnalysis?.potential_issues);
+  const recommendations = asList(log.aiAnalysis?.care_recommendations);
 
   return (
     <div className="overflow-hidden bg-white border border-gray-100 rounded-2xl shadow-sm">
@@ -59,9 +63,11 @@ export const HealthLogEntry = ({ log }) => {
                     <AlertTriangle size={16} className="mr-2" /> Potential issues
                   </h5>
                   <ul className="mt-2 space-y-1 text-sm text-red-700 list-disc list-inside">
-                    {log.aiAnalysis.potential_issues.map((issue, index) => (
-                      <li key={index}>{issue}</li>
-                    ))}
+                    {issues.length > 0 ? (
+                      issues.map((issue, index) => <li key={index}>{issue}</li>)
+                    ) : (
+                      <li>No issues detected yet.</li>
+                    )}
                   </ul>
                 </div>
                 <div>
@@ -69,9 +75,11 @@ export const HealthLogEntry = ({ log }) => {
                     <CheckCircle size={16} className="mr-2" /> Care recommendations
                   </h5>
                   <ul className="mt-2 space-y-1 text-sm text-green-700 list-disc list-inside">
-                    {log.aiAnalysis.care_recommendations.map((item, index) => (
-                      <li key={index}>{item}</li>
-                    ))}
+                    {recommendations.length > 0 ? (
+                      recommendations.map((item, index) => <li key={index}>{item}</li>)
+                    ) : (
+                      <li>No recommendations available yet.</li>
+                    )}
                   </ul>
                 </div>
               </div>

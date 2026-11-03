@@ -47,6 +47,41 @@ test('Caribbean overlap preserves mainland Central America', () => {
   }
 });
 
+test('mean magnitude keeps zero and negative values and skips missing ones', () => {
+  const context = vm.createContext({ window: { addEventListener() {} } });
+  vm.runInContext(script, context);
+  vm.runInContext(`
+    renderGlobalStats = renderTopEvents = renderRegions = renderDepthAnalytics = renderTimeline = initMap = () => {};
+    globalDayFeatures = [
+      { geometry: { coordinates: [-80, 32, 10] }, properties: { mag: -1, time: Date.now() } },
+      { geometry: { coordinates: [-79, 33, 10] }, properties: { mag: 0, time: Date.now() } },
+      { geometry: { coordinates: [-78, 34, 10] }, properties: { mag: 1, time: Date.now() } },
+      { geometry: { coordinates: [-77, 35, 10] }, properties: { mag: null, time: Date.now() } },
+    ];
+    activeMode = 'US East / Carolinas';
+    recomputeForMode();
+  `, context);
+  assert.equal(vm.runInContext('globalStats.todayCount', context), 4);
+  assert.equal(vm.runInContext('globalStats.meanMagnitude', context), '0.0');
+
+  vm.runInContext(`
+    globalDayFeatures = [
+      { geometry: { coordinates: [-80, 32, 10] }, properties: { mag: -2, time: Date.now() } },
+      { geometry: { coordinates: [-79, 33, 10] }, properties: { mag: 0, time: Date.now() } },
+    ];
+    recomputeForMode();
+  `, context);
+  assert.equal(vm.runInContext('globalStats.meanMagnitude', context), '-1.0');
+
+  vm.runInContext(`
+    globalDayFeatures = [
+      { geometry: { coordinates: [-80, 32, 10] }, properties: { time: Date.now() } },
+    ];
+    recomputeForMode();
+  `, context);
+  assert.equal(vm.runInContext('globalStats.meanMagnitude', context), '—');
+});
+
 test('empty regional energy excludes large global events', () => {
   const context = vm.createContext({ window: { addEventListener() {} } });
   vm.runInContext(script, context);
