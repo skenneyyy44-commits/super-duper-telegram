@@ -1,10 +1,11 @@
 import PropTypes from 'prop-types';
 import './ControlPanel.css';
 
-function formatValue(value) {
+function formatValue(value, step) {
+  const digits = Number.isInteger(step) ? 0 : 1;
   return Number(value).toLocaleString(undefined, {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
   });
 }
 
@@ -20,7 +21,7 @@ export default function ControlPanel({ controls, onChange }) {
           <label key={id} className="control">
             <div className="control__header">
               <span className="control__label">{label}</span>
-              <span className="control__value">{formatValue(value)}</span>
+              <span className="control__value">{formatValue(value, step)}</span>
             </div>
             <input
               type="range"

@@ -39,14 +39,17 @@ export function createEarthquakeSimulation(canvas, options) {
   };
 
   function resize() {
-    const { clientWidth, clientHeight } = canvas;
-    if (!clientWidth || !clientHeight) {
+    const cssWidth = canvas.clientWidth;
+    const cssHeight = canvas.clientHeight;
+    if (!cssWidth || !cssHeight) {
       return;
     }
-    state.width = Math.floor(clientWidth * dpr);
-    state.height = Math.floor(clientHeight * dpr);
-    canvas.width = state.width;
-    canvas.height = state.height;
+    // Simulation coordinates stay in CSS pixels. Only the bitmap is scaled for DPR,
+    // otherwise setTransform would push epicentres off a high-density display.
+    state.width = cssWidth;
+    state.height = cssHeight;
+    canvas.width = Math.floor(cssWidth * dpr);
+    canvas.height = Math.floor(cssHeight * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const seeded = createWaves(state.width, state.height, options);

@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   base: './',
   build: {
-    outDir: path.resolve(__dirname, '../static'),
+    outDir: path.resolve(__dirname, '../static/wave-simulator'),
     emptyOutDir: true,
     assetsDir: 'assets'
   }

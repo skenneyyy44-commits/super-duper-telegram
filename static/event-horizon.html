@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Event Horizon: Advanced Black Hole Simulator</title>
+  <style>
+    :root {
+      --accent: #7dd2ff;
+      --accent-strong: #3cb5ff;
+      --panel-bg: rgba(10, 14, 24, 0.86);
+      --panel-border: rgba(125, 210, 255, 0.5);
+      --text: #dce7ff;
+      --muted: #7fa0c0;
+      --warning: #ffb347;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: radial-gradient(circle at 20% 20%, rgba(63, 94, 251, 0.08), transparent 30%),
+        radial-gradient(circle at 80% 10%, rgba(252, 70, 107, 0.12), transparent 40%),
+        #02040a;
+      font-family: 'Inter', 'SF Pro Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      color: var(--text);
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* Utility UI elements */
+    #ui-toggle {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      z-index: 22;
+      padding: 6px 12px;
+      font-size: 12px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      background: rgba(5, 10, 20, 0.9);
+      color: var(--accent);
+      border: 1px solid var(--panel-border);
+      border-radius: 4px;
+      cursor: pointer;
+      pointer-events: auto;
+      text-shadow: 0 0 10px rgba(100, 200, 255, 0.8);
+      transition: background 0.2s ease, transform 0.15s ease, opacity 0.2s ease;
+    }
+
+    #ui-toggle:hover {
+      background: rgba(125, 210, 255, 0.15);
+      transform: translateY(-1px);
+    }
+
+    #ui-toggle.collapsed {
+      opacity: 0.55;
+    }
+
+    #ui-layer {
+      position: absolute;
+      top: 54px;
+      left: 14px;
+      width: 300px;
+      pointer-events: none;
+      z-index: 20;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    #ui-layer.hidden {
+      display: none;
+    }
+
+    #ui-layer.idle .panel {
+      opacity: 0.35;
+      transform: translateY(2px);
+    }
+
+    .panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-left: 3px solid var(--accent-strong);
+      padding: 14px 14px 12px;
+      margin-bottom: 10px;
+      backdrop-filter: blur(8px);
+      pointer-events: auto;
+      border-radius: 6px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      transition: opacity 0.2s ease, transform 0.12s ease;
+    }
+
+    .panel:hover {
+      transform: translateY(-1px);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h1::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #fff 0%, var(--accent) 70%);
+      box-shadow: 0 0 12px var(--accent);
+    }
+
+    h2 {
+      margin: 12px 0 6px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--muted);
+    }
+
+    .control-group {
+      margin-bottom: 10px;
+    }
+
+    label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+
+    input[type='range'] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      outline: none;
+    }
+
+    input[type='range']::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 10px var(--accent);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+    }
+
+    input[type='range']::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 10px var(--accent);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+    }
+
+    .data-readout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+      font-size: 11px;
+      color: #fff;
+      margin-top: 10px;
+    }
+
+    .data-label {
+      color: var(--muted);
+    }
+
+    .data-value {
+      text-align: right;
+      font-weight: 700;
+      color: var(--warning);
+    }
+
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 24px;
+      letter-spacing: 5px;
+      animation: pulse 2s infinite;
+      text-shadow: 0 0 12px rgba(100, 200, 255, 0.8);
+      z-index: 25;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+
+    .toggle-btn, .pill-btn {
+      background: rgba(10, 20, 30, 0.8);
+      border: 1px solid rgba(100, 200, 255, 0.6);
+      color: var(--accent);
+      padding: 8px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      width: 100%;
+      text-transform: uppercase;
+      transition: all 0.2s ease;
+      border-radius: 4px;
+    }
+
+    .toggle-btn:hover, .pill-btn:hover {
+      background: rgba(125, 210, 255, 0.12);
+    }
+
+    .pill-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .pill-btn {
+      flex: 1;
+      min-width: 90px;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .pill-btn.active {
+      border-color: var(--accent-strong);
+      background: rgba(125, 210, 255, 0.12);
+      color: #fff;
+    }
+
+    .status-bar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      font-size: 11px;
+      margin-top: 6px;
+    }
+
+    .status-chip {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(125, 210, 255, 0.4);
+      border-radius: 6px;
+      padding: 8px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .status-chip strong {
+      display: block;
+      color: #fff;
+      font-size: 13px;
+      margin-top: 4px;
+    }
+
+    #toast {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: rgba(15, 20, 28, 0.9);
+      border: 1px solid rgba(125, 210, 255, 0.45);
+      padding: 10px 12px;
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+      opacity: 0;
+      transform: translateY(-8px);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      z-index: 24;
+      max-width: 340px;
+      line-height: 1.5;
+    }
+
+    #toast.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .footnote {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.4;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 640px) {
+      #ui-toggle { left: 10px; top: 10px; }
+      #ui-layer { left: 10px; width: calc(100% - 20px); }
+      .status-bar { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+  <button id="ui-toggle">Hide UI</button>
+  <div id="loading">INITIALIZING SINGULARITY...</div>
+  <div id="toast"></div>
+
+  <div id="ui-layer">
+    <div class="panel" id="panel-controls">
+      <h1>Singularity Engine</h1>
+
+      <h2>Physics</h2>
+      <div class="control-group">
+        <label><span>Event Horizon Mass</span> <span id="val-mass">1.0</span></label>
+        <input type="range" id="mass" min="0.1" max="3.0" step="0.1" value="1.0" />
+      </div>
+
+      <div class="control-group">
+        <label><span>Accretion Disk Density</span> <span id="val-density">1.2</span></label>
+        <input type="range" id="density" min="0.0" max="3.0" step="0.1" value="1.2" />
+      </div>
+
+      <div class="control-group">
+        <label><span>Disk Temperature (Kelvin)</span> <span id="val-temp">Med</span></label>
+        <input type="range" id="temp" min="0.0" max="1.0" step="0.01" value="0.5" />
+      </div>
+
+      <div class="control-group">
+        <label><span>Gravitational Lensing</span> <span id="val-lens">1.00</span></label>
+        <input type="range" id="lensing" min="0.0" max="1.0" step="0.01" value="1.0" />
+      </div>
+
+      <h2>Camera</h2>
+      <div class="control-group">
+        <label><span>Auto-Rotate Speed</span> <span id="val-rotate">0.50</span></label>
+        <input type="range" id="rotate" min="0" max="2" step="0.05" value="0.5" />
+      </div>
+
+      <div class="pill-row">
+        <button class="pill-btn" data-preset="calm">Calm Orbit</button>
+        <button class="pill-btn" data-preset="storm">Solar Storm</button>
+        <button class="pill-btn" data-preset="singularity">Deep Gravity</button>
+      </div>
+
+      <div class="control-group" style="margin-top: 10px;">
+        <button class="toggle-btn" id="resetCam">Reset Camera</button>
+      </div>
+
+      <div class="control-group">
+        <button class="toggle-btn" id="pauseBtn">Pause Animation</button>
+      </div>
+
+      <div class="control-group">
+        <button class="toggle-btn" id="screenshotBtn">Capture Frame</button>
+      </div>
+
+      <div class="status-bar">
+        <div class="status-chip">
+          Idle Fade
+          <strong>Move mouse</strong>
+        </div>
+        <div class="status-chip">
+          Hotkeys
+          <strong>[Space] Pause</strong>
+        </div>
+        <div class="status-chip">
+          UI
+          <strong>[H] Hide</strong>
+        </div>
+      </div>
+
+      <div class="footnote">This simulation is a stylized visualization of relativistic accretion physics. Parameters are normalized for aesthetics rather than strict astrophysical accuracy.</div>
+    </div>
+
+    <div class="panel" id="panel-telemetry">
+      <h1>Telemetry</h1>
+      <div class="data-readout">
+        <span class="data-label">Schwarzschild Radius:</span>
+        <span class="data-value" id="rs-readout">2.95 KM</span>
+
+        <span class="data-label">Time Dilation:</span>
+        <span class="data-value" id="td-readout">1.000x</span>
+
+        <span class="data-label">Frame Rate:</span>
+        <span class="data-value" id="fps-readout">60 FPS</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Configuration & State ---
+    const config = {
+      mass: 1.0,
+      diskDensity: 1.2,
+      diskTemp: 0.5,
+      lensingStrength: 1.0,
+      rotateSpeed: 0.5,
+      resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+    };
+
+    const state = {
+      paused: false,
+      lastTime: 0,
+      fpsAccumulator: 0,
+      fpsFrames: 0,
+    };
+
+    const presets = {
+      calm: { mass: 0.8, diskDensity: 0.9, diskTemp: 0.35, lensingStrength: 0.8, rotateSpeed: 0.4 },
+      storm: { mass: 1.4, diskDensity: 1.8, diskTemp: 0.8, lensingStrength: 1.0, rotateSpeed: 1.2 },
+      singularity: { mass: 2.4, diskDensity: 2.6, diskTemp: 0.95, lensingStrength: 1.0, rotateSpeed: 0.6 },
+    };
+
+    // --- Three.js Setup ---
+    const scene = new THREE.Scene();
+    const camera = new THREE.Camera();
+    const virtualCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 120);
+    virtualCamera.position.set(0, 2.2, 9.5);
+    virtualCamera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    renderer.setClearColor(0x000000, 1);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(virtualCamera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.enablePan = false;
+    controls.minDistance = 2.5;
+    controls.maxDistance = 20;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = config.rotateSpeed;
+
+    // --- Shaders ---
+    const vertexShader = `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = vec4(position, 1.0);
+      }
+    `;
+
+    const fragmentShader = `
+      uniform float iTime;
+      uniform vec2 iResolution;
+      uniform vec3 cameraPos;
+      uniform vec3 cameraDir;
+      uniform vec3 cameraUp;
+      uniform float fov;
+
+      uniform float uMass;
+      uniform float uDensity;
+      uniform float uTemp;
+      uniform float uLensing;
+
+      varying vec2 vUv;
+
+      #define MAX_STEPS 90
+      #define STEP_SIZE 0.05
+      #define MAX_DIST 22.0
+
+      vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+      vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+      float snoise(vec3 v) {
+        const vec2  C = vec2(1.0/6.0, 1.0/3.0);
+        const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+
+        vec3 i  = floor(v + dot(v, C.yyy));
+        vec3 x0 = v - i + dot(i, C.xxx);
+
+        vec3 g = step(x0.yzx, x0.xyz);
+        vec3 l = 1.0 - g;
+        vec3 i1 = min(g.xyz, l.zxy);
+        vec3 i2 = max(g.xyz, l.zxy);
+
+        vec3 x1 = x0 - i1 + C.xxx;
+        vec3 x2 = x0 - i2 + C.yyy;
+        vec3 x3 = x0 - D.yyy;
+
+        i = mod289(i);
+        vec4 p = permute(permute(permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+
+        float n_ = 0.142857142857;
+        vec3  ns = n_ * D.wyz - D.xzx;
+
+        vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+        vec4 x_ = floor(j * ns.z);
+        vec4 y_ = floor(j - 7.0 * x_);
+
+        vec4 x = x_ * ns.x + ns.yyyy;
+        vec4 y = y_ * ns.x + ns.yyyy;
+        vec4 h = 1.0 - abs(x) - abs(y);
+
+        vec4 b0 = vec4(x.xy, y.xy);
+        vec4 b1 = vec4(x.zw, y.zw);
+
+        vec4 s0 = floor(b0) * 2.0 + 1.0;
+        vec4 s1 = floor(b1) * 2.0 + 1.0;
+        vec4 sh = -step(h, vec4(0.0));
+
+        vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+        vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+
+        vec3 p0 = vec3(a0.xy, h.x);
+        vec3 p1 = vec3(a0.zw, h.y);
+        vec3 p2 = vec3(a1.xy, h.z);
+        vec3 p3 = vec3(a1.zw, h.w);
+
+        vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+        p0 *= norm.x;
+        p1 *= norm.y;
+        p2 *= norm.z;
+        p3 *= norm.w;
+
+        vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+        m = m * m;
+        return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+      }
+
+      float fbm(vec3 p) {
+        float f = 0.0;
+        float w = 0.5;
+        for (int i = 0; i < 5; i++) {
+          f += w * snoise(p);
+          p *= 2.0;
+          w *= 0.5;
+        }
+        return f;
+      }
+
+      vec3 getBackground(vec3 dir) {
+        float stars = pow(clamp(snoise(dir * 200.0), 0.0, 1.0), 18.0) * 40.0;
+        float nebula = fbm(dir * 2.0 + iTime * 0.01);
+        vec3 nebColor = mix(vec3(0.02, 0.04, 0.12), vec3(0.16, 0.04, 0.22), nebula);
+        return vec3(stars) + nebColor * 0.25;
+      }
+
+      vec3 blackbody(float Temp) {
+        vec3 col = vec3(255.0);
+        col.x = 56100000.0 * pow(Temp, -1.5) + 148.0;
+        col.y = 100.04 * log(Temp) - 623.6;
+        col.z = 194.18 * log(Temp) - 1448.6;
+        col = clamp(col, 0.0, 255.0) / 255.0;
+        if (Temp < 1000.0) col *= Temp / 1000.0;
+        return col;
+      }
+
+      void main() {
+        vec2 uv = (vUv - 0.5) * 2.0;
+        uv.x *= iResolution.x / iResolution.y;
+
+        vec3 forward = normalize(cameraDir);
+        vec3 right   = normalize(cross(forward, cameraUp));
+        vec3 up      = cross(right, forward);
+
+        vec3 rayDir = normalize(forward * fov + right * uv.x + up * uv.y);
+        vec3 rayPos = cameraPos;
+
+        vec3 accumColor = vec3(0.0);
+        float accumDensity = 0.0;
+        float rayLen = 0.0;
+
+        float eventHorizon = uMass * 0.5;
+        float accretionMin = eventHorizon * 2.5;
+        float accretionMax = eventHorizon * 6.5;
+
+        vec3 bentDir = rayDir;
+
+        for (int i = 0; i < MAX_STEPS; i++) {
+          float distToCenter = length(rayPos);
+
+          if (distToCenter > eventHorizon) {
+            float force = (uMass * uLensing) / (distToCenter * distToCenter + 0.0001);
+            bentDir = normalize(bentDir - normalize(rayPos) * force * STEP_SIZE);
+          }
+
+          rayPos += bentDir * STEP_SIZE;
+          rayLen += STEP_SIZE;
+
+          if (distToCenter < eventHorizon) {
+            accumDensity = 1.0;
+            break;
+          }
+
+          float diskHeight = 0.15 * (distToCenter / accretionMax);
+
+          if (abs(rayPos.y) < diskHeight && distToCenter > accretionMin && distToCenter < accretionMax) {
+            float speed = (1.0 / max(distToCenter, 0.001)) * 2.0;
+            float rotOffset = iTime * speed;
+
+            float c = cos(rotOffset);
+            float s = sin(rotOffset);
+            vec3 rotPos = vec3(rayPos.x * c - rayPos.z * s, rayPos.y, rayPos.x * s + rayPos.z * c);
+
+            float noiseVal = fbm(rotPos * 3.0);
+
+            float radialFade = 1.0 - smoothstep(accretionMax - 1.0, accretionMax, distToCenter);
+            float innerFade = smoothstep(accretionMin, accretionMin + 0.5, distToCenter);
+            float yFade = 1.0 - smoothstep(0.0, diskHeight, abs(rayPos.y));
+
+            float density = noiseVal * radialFade * innerFade * yFade * uDensity;
+
+            if (density > 0.01) {
+              vec3 diskVel = normalize(vec3(-rayPos.z, 0.0, rayPos.x));
+              float doppler = dot(bentDir, diskVel);
+
+              float tempBase = mix(1000.0, 8200.0, uTemp);
+              float distFactor = 1.0 - (distToCenter - accretionMin) / (accretionMax - accretionMin + 0.0001);
+              float localTemp = tempBase * (1.0 + distFactor) * (1.0 + doppler * 0.5);
+
+              vec3 glow = blackbody(localTemp);
+              float alpha = clamp(density * 0.4 * STEP_SIZE, 0.0, 1.0);
+
+              accumColor += glow * alpha * (1.0 - accumDensity);
+              accumDensity += alpha;
+            }
+          }
+
+          if (accumDensity >= 1.0) break;
+          if (distToCenter > MAX_DIST) break;
+        }
+
+        vec3 bg = getBackground(bentDir);
+        vec3 col = accumColor + bg * (1.0 - accumDensity);
+        col = pow(max(col, 0.0), vec3(0.4545));
+
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `;
+
+    const geometry = new THREE.PlaneGeometry(2, 2);
+    const uniforms = {
+      iTime: { value: 0 },
+      iResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+      cameraPos: { value: new THREE.Vector3() },
+      cameraDir: { value: new THREE.Vector3() },
+      cameraUp: { value: new THREE.Vector3(0, 1, 0) },
+      fov: { value: 1.0 },
+      uMass: { value: config.mass },
+      uDensity: { value: config.diskDensity },
+      uTemp: { value: config.diskTemp },
+      uLensing: { value: config.lensingStrength },
+    };
+
+    const material = new THREE.ShaderMaterial({ vertexShader, fragmentShader, uniforms });
+    const quad = new THREE.Mesh(geometry, material);
+    scene.add(quad);
+
+    // --- UI Helpers ---
+    const uiLayer = document.getElementById('ui-layer');
+    const uiToggle = document.getElementById('ui-toggle');
+    const toast = document.getElementById('toast');
+    let uiVisible = true;
+    let uiIdleTimeout;
+    const idleDelay = 2800;
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('visible');
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => toast.classList.remove('visible'), 2200);
+    }
+
+    function markUiActive() {
+      uiLayer.classList.remove('idle');
+      clearTimeout(uiIdleTimeout);
+      uiIdleTimeout = setTimeout(() => {
+        if (uiVisible) uiLayer.classList.add('idle');
+      }, idleDelay);
+    }
+
+    window.addEventListener('mousemove', markUiActive);
+    window.addEventListener('touchstart', markUiActive);
+    markUiActive();
+
+    uiToggle.addEventListener('click', () => {
+      uiVisible = !uiVisible;
+      if (uiVisible) {
+        uiLayer.classList.remove('hidden');
+        uiToggle.classList.remove('collapsed');
+        uiToggle.textContent = 'Hide UI';
+        showToast('HUD restored');
+      } else {
+        uiLayer.classList.add('hidden');
+        uiToggle.classList.add('collapsed');
+        uiToggle.textContent = 'Show UI';
+        showToast('HUD hidden (press H to toggle)');
+      }
+    });
+
+    window.addEventListener('keydown', (ev) => {
+      if (ev.key.toLowerCase() === 'h') {
+        uiToggle.click();
+      }
+      if (ev.code === 'Space') {
+        ev.preventDefault();
+        togglePause();
+      }
+    });
+
+    // --- Event Listeners ---
+    document.getElementById('loading').style.display = 'none';
+
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      renderer.setSize(w, h);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+      virtualCamera.aspect = w / h;
+      virtualCamera.updateProjectionMatrix();
+      uniforms.iResolution.value.set(w, h);
+    });
+
+    const massSlider = document.getElementById('mass');
+    const densitySlider = document.getElementById('density');
+    const tempSlider = document.getElementById('temp');
+    const lensingSlider = document.getElementById('lensing');
+    const rotateSlider = document.getElementById('rotate');
+
+    const massVal = document.getElementById('val-mass');
+    const densityVal = document.getElementById('val-density');
+    const tempVal = document.getElementById('val-temp');
+    const lensingVal = document.getElementById('val-lens');
+    const rotateVal = document.getElementById('val-rotate');
+
+    const tempMap = ['Low', 'Med', 'High', 'Extreme'];
+
+    function updateTempLabel(value) {
+      const idx = Math.min(3, Math.max(0, Math.floor(value * 3.01)));
+      tempVal.innerText = tempMap[idx];
+    }
+
+    function syncControls() {
+      massSlider.value = config.mass.toFixed(1);
+      densitySlider.value = config.diskDensity.toFixed(1);
+      tempSlider.value = config.diskTemp.toFixed(2);
+      lensingSlider.value = config.lensingStrength.toFixed(2);
+      rotateSlider.value = config.rotateSpeed.toFixed(2);
+
+      massVal.innerText = parseFloat(massSlider.value).toFixed(1);
+      densityVal.innerText = parseFloat(densitySlider.value).toFixed(1);
+      updateTempLabel(parseFloat(tempSlider.value));
+      lensingVal.innerText = parseFloat(lensingSlider.value).toFixed(2);
+      rotateVal.innerText = parseFloat(rotateSlider.value).toFixed(2);
+    }
+
+    syncControls();
+
+    massSlider.addEventListener('input', (e) => {
+      config.mass = parseFloat(e.target.value);
+      massVal.innerText = config.mass.toFixed(1);
+    });
+
+    densitySlider.addEventListener('input', (e) => {
+      config.diskDensity = parseFloat(e.target.value);
+      densityVal.innerText = config.diskDensity.toFixed(1);
+    });
+
+    tempSlider.addEventListener('input', (e) => {
+      config.diskTemp = parseFloat(e.target.value);
+      updateTempLabel(config.diskTemp);
+    });
+
+    lensingSlider.addEventListener('input', (e) => {
+      config.lensingStrength = parseFloat(e.target.value);
+      lensingVal.innerText = config.lensingStrength.toFixed(2);
+    });
+
+    rotateSlider.addEventListener('input', (e) => {
+      config.rotateSpeed = parseFloat(e.target.value);
+      rotateVal.innerText = config.rotateSpeed.toFixed(2);
+      controls.autoRotateSpeed = config.rotateSpeed;
+    });
+
+    document.getElementById('resetCam').addEventListener('click', () => {
+      virtualCamera.position.set(0, 2.2, 9.5);
+      virtualCamera.lookAt(0, 0, 0);
+      controls.target.set(0, 0, 0);
+      showToast('Camera reset to default orbit');
+    });
+
+    function togglePause() {
+      state.paused = !state.paused;
+      document.getElementById('pauseBtn').textContent = state.paused ? 'Resume Animation' : 'Pause Animation';
+      showToast(state.paused ? 'Animation paused' : 'Animation resumed');
+    }
+
+    document.getElementById('pauseBtn').addEventListener('click', togglePause);
+
+    document.getElementById('screenshotBtn').addEventListener('click', () => {
+      renderer.render(scene, camera);
+      const dataURL = renderer.domElement.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = dataURL;
+      link.download = 'event-horizon.png';
+      link.click();
+      showToast('Frame captured to PNG');
+    });
+
+    document.querySelectorAll('.pill-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const preset = presets[btn.dataset.preset];
+        if (!preset) return;
+
+        Object.assign(config, preset);
+        controls.autoRotateSpeed = preset.rotateSpeed;
+        document.querySelectorAll('.pill-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        syncControls();
+        showToast(`Preset applied: ${btn.textContent}`);
+      });
+    });
+
+    // --- Telemetry & Animation ---
+    function updateTelemetry(delta) {
+      state.fpsAccumulator += delta;
+      state.fpsFrames++;
+
+      if (state.fpsAccumulator >= 0.25) {
+        const fps = Math.max(1, Math.round(state.fpsFrames / state.fpsAccumulator));
+        document.getElementById('fps-readout').innerText = `${fps} FPS`;
+
+        const dist = virtualCamera.position.length();
+        const eps = 0.1;
+        let tdString = '1.000x';
+
+        if (dist > 1.0 + eps) {
+          const td = 1.0 + 1.0 / (dist - 1.0);
+          tdString = `${td.toFixed(3)}x`;
+        } else {
+          tdString = 'CRITICAL';
+        }
+
+        document.getElementById('td-readout').innerText = tdString;
+
+        const rs = (config.mass * 2.95).toFixed(2);
+        document.getElementById('rs-readout').innerText = `${rs} KM`;
+
+        state.fpsAccumulator = 0;
+        state.fpsFrames = 0;
+      }
+    }
+
+    function updateUniforms(time) {
+      uniforms.iTime.value = time;
+      uniforms.iResolution.value.set(window.innerWidth, window.innerHeight);
+      uniforms.cameraPos.value.copy(virtualCamera.position);
+
+      const camDir = new THREE.Vector3();
+      virtualCamera.getWorldDirection(camDir);
+      uniforms.cameraDir.value.copy(camDir);
+
+      const camUp = new THREE.Vector3(0, 1, 0).applyQuaternion(virtualCamera.quaternion);
+      uniforms.cameraUp.value.copy(camUp);
+      uniforms.fov.value = Math.tan((virtualCamera.fov * Math.PI / 180) * 0.5);
+
+      uniforms.uMass.value = config.mass;
+      uniforms.uDensity.value = config.diskDensity;
+      uniforms.uTemp.value = config.diskTemp;
+      uniforms.uLensing.value = config.lensingStrength;
+    }
+
+    function animate(timestamp) {
+      requestAnimationFrame(animate);
+      const time = timestamp * 0.001;
+      const delta = Math.max(0, time - state.lastTime);
+      state.lastTime = time;
+
+      if (!state.paused) {
+        controls.update();
+        updateTelemetry(delta);
+        updateUniforms(time);
+        renderer.render(scene, camera);
+      }
+    }
+
+    // Start animation loop and a manual render so paused state still shows first frame
+    updateUniforms(0);
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
