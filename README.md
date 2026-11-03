@@ -1,6 +1,6 @@
 # Demos
 
-This repository holds several small demos side by side: a Boston–Washington map, a houseplant tracker, a 3D physics sandbox, and an earthquake simulator.
+This repository holds several small demos side by side: a Boston–Washington map, a houseplant tracker, a 3D physics sandbox, an earthquake simulator, and an Earth Risk Sentinel dashboard.
 
 ## BosWash map
 
@@ -47,10 +47,15 @@ Open http://localhost:8080/physix-lab.html. Choose a shape, press "Start solver"
 
 Shift-click the terrain to place the epicenter, then use the "Simulation Control" panel to set magnitude, depth, and which waves are enabled. "INITIATE EVENT" starts the quake. "RESET SCENE" puts the buildings back.
 
+## Earth Risk Sentinel
+
+`earth_risk_sentinel.html` is a USGS earthquake dashboard with regional filters, an energy index, and a Leaflet map. With the same static server running, open http://localhost:8080/earth_risk_sentinel.html. Use the region buttons to limit the stats and the map to that belt. A real mean magnitude includes zero and negative values; missing magnitudes are left out.
+
 ## Tests
 
 ```bash
 cd tests/health-log && npm ci && npm test
 cd tests/map-stats && npm ci && npm test
-node --test tests/test_physix_lab.cjs
+node --test tests/test_physix_lab.cjs tests/earth_risk_regions.test.cjs
+python3 -m pytest tests/ -q
 ```
