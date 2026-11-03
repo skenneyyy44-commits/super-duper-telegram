@@ -7,7 +7,7 @@
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-VzLJI8vY5G9C4zjDqgW8sELxAoCYwLPLpXsk1M5pC2I="
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
     crossorigin=""
   />
   <style>
@@ -689,7 +689,7 @@
 
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-o9N1j7kGStG7zH7gLrPppZ9F90Yh0uU8gFv5p3p3p3s="
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
     crossorigin=""
   ></script>
   <script>
@@ -725,6 +725,8 @@
       { name: 'US West / Alaska', lat: [25, 72], lon: [-180, -100] },
       // Match US East before the broader Mexico box where their bounds overlap.
       { name: 'US East / Carolinas', lat: [30, 40], lon: [-90, -70] },
+      // Prioritize Cuba and Jamaica without capturing mainland Central America.
+      { name: 'Caribbean / Puerto Rico', lat: [17.5, 30], lon: [-85, -50] },
       { name: 'Mexico & Central America', lat: [0, 35], lon: [-120, -70] },
       { name: 'Caribbean / Puerto Rico', lat: [0, 30], lon: [-90, -50] }
     ];
@@ -945,7 +947,7 @@
     }
 
     function computeEnergy(features) {
-      if (!features.length) return { score: 0, text: '—' };
+      if (!features.length) return { score: '0.00', label: 'No earthquakes in this view', percent: 0 };
       const sum = features.reduce((acc, feature) => {
         const mag = feature.properties.mag || 0;
         if (mag <= 0) return acc;
@@ -995,7 +997,7 @@
       const meanMag = magnitudes.length ? (magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length).toFixed(1) : '—';
       globalStats.meanMagnitude = meanMag;
 
-      const energy = computeEnergy(filteredDay.length ? filteredDay : globalDayFeatures);
+      const energy = computeEnergy(filteredDay);
       globalStats.energyIndex = `${energy.label} (log₁₀E ${energy.score})`;
       globalStats.energyPercent = energy.percent;
 

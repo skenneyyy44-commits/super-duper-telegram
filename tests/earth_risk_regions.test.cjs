@@ -16,7 +16,7 @@ test('US East takes precedence in overlapping bounds without changing other belt
     [30, -90, 'US East / Carolinas'],
     [35, -70, 'US East / Carolinas'],
     [40, -80, 'US East / Carolinas'],
-    [29.9, -80, 'Mexico & Central America'],
+    [29.9, -80, 'Caribbean / Puerto Rico'],
     [19, -99, 'Mexico & Central America'],
     [18, -66, 'Caribbean / Puerto Rico'],
     [34, -118, 'US West / Alaska'],
@@ -31,7 +31,37 @@ test('US East takes precedence in overlapping bounds without changing other belt
   vm.runInContext("activeMode = 'US East / Carolinas'", context);
   assert.deepEqual(Array.from(context.getModeFilteredFeatures(context.features), (f) => f.id), [0, 1, 2, 3]);
   vm.runInContext("activeMode = 'Mexico & Central America'", context);
-  assert.deepEqual(Array.from(context.getModeFilteredFeatures(context.features), (f) => f.id), [4, 5]);
+  assert.deepEqual(Array.from(context.getModeFilteredFeatures(context.features), (f) => f.id), [5]);
   vm.runInContext("activeMode = 'GLOBAL'", context);
   assert.equal(context.getModeFilteredFeatures(context.features), context.features);
+});
+
+test('Caribbean overlap preserves mainland Central America', () => {
+  const context = vm.createContext({ window: { addEventListener() {} } });
+  vm.runInContext(script, context);
+  for (const [lat, lon] of [[18, -77], [23, -82]]) {
+    assert.equal(context.classifyRegion(lat, lon), 'Caribbean / Puerto Rico');
+  }
+  for (const [lat, lon] of [[9, -79.5], [10, -84], [13, -85], [15, -87], [17, -88], [21, -87]]) {
+    assert.equal(context.classifyRegion(lat, lon), 'Mexico & Central America');
+  }
+});
+
+test('empty regional energy excludes large global events', () => {
+  const context = vm.createContext({ window: { addEventListener() {} } });
+  vm.runInContext(script, context);
+  vm.runInContext(`
+    renderGlobalStats = renderTopEvents = renderRegions = renderDepthAnalytics = renderTimeline = initMap = () => {};
+    globalDayFeatures = [{ geometry: { coordinates: [142, 38, 10] }, properties: { mag: 7, time: Date.now() } }];
+    activeMode = 'US East / Carolinas';
+    recomputeForMode();
+  `, context);
+  assert.equal(vm.runInContext('globalStats.todayCount', context), 0);
+  assert.equal(vm.runInContext('globalStats.energyPercent', context), 0);
+  assert.match(vm.runInContext('globalStats.energyIndex', context), /^No earthquakes in this view/);
+  vm.runInContext("activeMode = 'Japan & Kurils'; recomputeForMode()", context);
+  assert.match(vm.runInContext('globalStats.energyIndex', context), /^Strong energy discharge .*10\.50/);
+  vm.runInContext("activeMode = 'GLOBAL'; globalDayFeatures = []; recomputeForMode()", context);
+  assert.equal(vm.runInContext('globalStats.energyPercent', context), 0);
+  assert.doesNotMatch(vm.runInContext('globalStats.energyIndex', context), /undefined/);
 });
