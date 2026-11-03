@@ -281,6 +281,11 @@ def create_app():
         """Return explicitly synthetic commute data, not live conditions."""
         return jsonify(generate_commute_demo())
 
+    @app.route('/api/commute')
+    def live_commute_unavailable():
+        """Reject live-commute requests rather than returning an SPA as HTTP 200."""
+        return "Live commute data unavailable; synthetic demo: /api/commute/demo", 501
+
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
     def serve(path):
