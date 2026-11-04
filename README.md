@@ -55,6 +55,10 @@ Open http://localhost:8080/physix-lab.html.
 
 `static/index.html` is the Flask-served Earthquake Wave Laboratory. `simulator.html` at the repository root is the Seismic Architecture Lab. With the static server above, open http://localhost:8080/simulator.html or http://localhost:8080/static/index.html. The Flask app also serves the laboratory at http://localhost:5000/.
 
+## Bitcoin outlook dashboard
+
+`static/bitcoin-outlook.html` contains the interactive Bitcoin dashboard with simulated price data. Open http://localhost:5000/bitcoin-outlook.html with Flask, or http://localhost:8080/static/bitcoin-outlook.html with the static server above.
+
 ## Earth Risk Sentinel
 
 `earth_risk_sentinel.html` is a USGS earthquake dashboard with regional filters, an energy index, and a Leaflet map. With the same static server running, open http://localhost:8080/earth_risk_sentinel.html. Use the region buttons to limit the stats and the map to that belt. A real mean magnitude includes zero and negative values; missing magnitudes are left out.
