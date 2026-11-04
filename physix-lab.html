@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Physix Lab 3D</title>
+<style>
+:root{color-scheme:dark;font:14px system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#080e1b;color:#e9efff;overflow:hidden}canvas{display:block}#panel{position:absolute;left:16px;top:16px;max-height:calc(100vh - 32px);overflow:auto;width:min(330px,calc(100vw - 32px));background:#111b2de9;border:1px solid #33425d;border-radius:16px;padding:17px;box-shadow:0 10px 35px #0008}h1{font-size:21px;margin:0 0 7px}.status{color:#8da4c5;font-size:12px;margin:0 0 12px}.group{margin:12px 0}label{display:flex;justify-content:space-between;gap:8px;margin-bottom:6px}input{width:100%;accent-color:#64baff}button{border:1px solid #475a7a;border-radius:8px;background:#223354;color:#f6f8ff;padding:8px 10px;cursor:pointer}button:hover{background:#34517e}button.active{background:#176cb0}button:focus-visible,input:focus-visible{outline:2px solid #81ccff}.buttons{display:flex;flex-wrap:wrap;gap:6px}.hint{color:#9eb1cd;font-size:12px;line-height:1.5}#toggle{background:#147c7a}#error{color:#ffb5b5}.dismiss{float:right}#hide{position:absolute;top:12px;right:12px;display:none} @media(max-width:650px){#panel{top:8px;left:8px;max-height:75vh;padding:12px}h1{font-size:18px}button{padding:7px}}
+</style>
+</head>
+<body>
+<button id="hide" aria-label="Show controls">Controls</button>
+<aside id="panel" aria-label="Physics lab controls">
+<button id="collapse" class="dismiss" aria-label="Hide controls">×</button>
+<h1>Physix Lab 3D</h1>
+<p id="status" class="status"><span id="runstate" aria-live="polite">PAUSED</span> · <span id="objectCount">Objects: 0</span> · <span id="fps">FPS: measuring…</span></p>
+<div class="group"><div class="buttons" id="shapes">
+<button data-shape="sphere" class="active">Sphere</button><button data-shape="cube">Cube</button><button data-shape="cylinder">Cylinder</button><button data-shape="pyramid">Pyramid</button>
+</div></div>
+<div class="group"><div class="buttons"><button id="toggle">▶ Start solver</button><button id="reset">Reset Arena</button></div></div>
+<div class="group"><strong>3D Presets</strong><div class="buttons" style="margin-top:8px">
+<button data-preset="pyramid">Block Pyramid</button><button data-preset="domino">Domino Spiral</button><button data-preset="wreck">Wrecking Ball</button><button data-preset="orbit">Zero-G Orbit</button>
+</div></div>
+<div class="group"><label for="gravity">Gravity (Y-Axis) <output id="gravityOut">-9.81</output></label><input id="gravity" type="range" min="-20" max="5" step=".01" value="-9.81"></div>
+<div class="group"><label for="bounce">Restitution (Bounce) <output id="bounceOut">0.70</output></label><input id="bounce" type="range" min="0" max="1" step=".01" value=".70"></div>
+<div class="group"><label for="friction">Surface Friction <output id="frictionOut">0.30</output></label><input id="friction" type="range" min="0" max="1" step=".01" value=".30"></div>
+<p class="hint">Drag to orbit; right-drag (or Shift+drag) to pan; scroll to zoom. Click an empty area to spawn a shape. Tap the arena on mobile.</p>
+<p id="error" role="alert"></p>
+</aside>
+<script type="module">
+import * as THREE from 'https://esm.sh/three@0.172.0';
+import {OrbitControls} from 'https://esm.sh/three@0.172.0/examples/jsm/controls/OrbitControls.js';
+import * as CANNON from 'https://esm.sh/cannon-es@0.20.0';
+const $=id=>document.getElementById(id), state={playing:false,shape:'sphere',items:[],orbiters:[],lastFps:null};
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;
+document.body.prepend(renderer.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color('#080e1b');scene.fog=new THREE.Fog('#080e1b',25,100);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,200);camera.position.set(15,13,19);
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,2,0);controls.maxPolarAngle=Math.PI/2-.03;
+scene.add(new THREE.HemisphereLight(0xbad6ff,0x18233e,2));const sun=new THREE.DirectionalLight(0xffffff,3);sun.position.set(9,19,11);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);sun.shadow.camera.left=-30;sun.shadow.camera.right=30;sun.shadow.camera.top=30;sun.shadow.camera.bottom=-30;sun.shadow.camera.far=100;sun.shadow.camera.updateProjectionMatrix();
+const world=new CANNON.World({gravity:new CANNON.Vec3(0,-9.81,0)});world.allowSleep=true;
+const material=new CANNON.Material('objects'),groundMaterial=new CANNON.Material('floor');
+const contact=new CANNON.ContactMaterial(material,groundMaterial,{friction:.3,restitution:.7});world.addContactMaterial(contact);
+world.addContactMaterial(new CANNON.ContactMaterial(material,material,{friction:.3,restitution:.7}));
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(160,160),new THREE.MeshStandardMaterial({color:0x17263a,roughness:1}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
+const grid=new THREE.GridHelper(160,80,0x3a5674,0x25364e);grid.position.y=.009;scene.add(grid);
+const floorBody=new CANNON.Body({mass:0,material:groundMaterial,shape:new CANNON.Plane()});floorBody.quaternion.setFromEuler(-Math.PI/2,0,0);world.addBody(floorBody);
+function spawn(kind,x,y,z,opts={}){
+ const r=opts.r??.55;let geometry,shape;
+ if(kind==='sphere'){geometry=new THREE.SphereGeometry(r,24,16);shape=new CANNON.Sphere(r)}
+ else if(kind==='cube'){geometry=new THREE.BoxGeometry(r*2,r*2,r*2);shape=new CANNON.Box(new CANNON.Vec3(r,r,r))}
+ else if(kind==='cylinder'){geometry=new THREE.CylinderGeometry(r,r,r*2,16);shape=new CANNON.Cylinder(r,r,r*2,16)}
+ else if(kind==='domino'){geometry=new THREE.BoxGeometry(.26,1.25,.65);shape=new CANNON.Box(new CANNON.Vec3(.13,.625,.325))}
+ else{geometry=new THREE.ConeGeometry(r,r*2,4);shape=new CANNON.Cylinder(.001,r,r*2,4)}
+ const color=opts.color??new THREE.Color().setHSL(Math.random(),.58,.56);
+ const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color,metalness:.15,roughness:.45}));
+ mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh);
+ const body=new CANNON.Body({mass:opts.mass??1,material,shape,position:new CANNON.Vec3(x,y,z),linearDamping:opts.orbit?0:.015,angularDamping:.04});
+ world.addBody(body);state.items.push({mesh,body});return body;
+}
+function clear(){state.orbiters.length=0;for(const {mesh,body} of state.items){world.removeBody(body);scene.remove(mesh);mesh.geometry.dispose();mesh.material.dispose()}state.items.length=0;updateStatus()}
+function updateStatus(){ $('runstate').textContent=state.playing?'RUNNING':'PAUSED';$('objectCount').textContent='Objects: '+state.items.length; }
+function setPlaying(on){state.playing=on;$('toggle').textContent=on?'⏸ Pause solver':'▶ Start solver';updateStatus()}
+$('toggle').onclick=()=>setPlaying(!state.playing);$('reset').onclick=()=>{clear();setPlaying(false)};
+document.querySelectorAll('[data-shape]').forEach(btn=>btn.onclick=()=>{state.shape=btn.dataset.shape;document.querySelectorAll('[data-shape]').forEach(b=>b.classList.toggle('active',b===btn))});
+for(const [id,out,action] of [['gravity','gravityOut',v=>world.gravity.y=v],['bounce','bounceOut',v=>{world.contactmaterials.forEach(c=>c.restitution=v)}],['friction','frictionOut',v=>{world.contactmaterials.forEach(c=>c.friction=v)}]])$(''+id).oninput=e=>{let v=Number(e.target.value);$(out).textContent=v.toFixed(2);action(v)};
+// BEGIN TESTABLE PHYSICS HELPERS
+const ORBIT_MU=22,ORBIT_CENTER=Object.freeze({x:0,y:2,z:0});
+function orbitVelocity(radius,angle){const speed=Math.sqrt(ORBIT_MU/radius);return {x:-Math.sin(angle)*speed,y:0,z:Math.cos(angle)*speed}}
+function orbitForce(position,mass){const dx=ORBIT_CENTER.x-position.x,dy=ORBIT_CENTER.y-position.y,dz=ORBIT_CENTER.z-position.z;const d2=dx*dx+dy*dy+dz*dz;const safeD2=Math.max(d2,2.25);const length=Math.sqrt(d2);if(length===0)return {x:0,y:0,z:0};const scale=mass*ORBIT_MU/(safeD2*length);return {x:dx*scale,y:dy*scale,z:dz*scale}}
+function dominoLayout(count=24){let a=0;const result=[];for(let i=0;i<count;i++){const radius=2+i*.085;result.push({x:Math.cos(a)*radius,y:.635,z:Math.sin(a)*radius,yaw:Math.PI/2-a,tilt:i===0?.28:0});a+=.68/radius}return result}
+// END TESTABLE PHYSICS HELPERS
+function preset(type){clear();if(type!=='orbit'){world.gravity.set(0,-9.81,0);$('gravity').value='-9.81';$('gravityOut').textContent='-9.81'}if(type==='pyramid'){for(let row=0;row<6;row++)for(let col=0;col<6-row;col++)spawn('cube',(col-(5-row)/2)*1.13,.58+row*1.12,0)}
+if(type==='domino'){for(const item of dominoLayout()){const b=spawn('domino',item.x,item.y,item.z);b.quaternion.setFromEuler(item.tilt,item.yaw,0)}}
+if(type==='wreck'){for(let row=0;row<3;row++)for(let col=0;col<4;col++)spawn('cube',col*1.1-1.65,.56+row*1.1,0,{r:.53});const b=spawn('sphere',-8,5,0,{r:1.1,mass:25,color:0xffb44e});b.velocity.set(12,0,0)}
+if(type==='orbit'){world.gravity.set(0,0,0);$('gravity').value='0';$('gravityOut').textContent='0.00';spawn('sphere',ORBIT_CENTER.x,ORBIT_CENTER.y,ORBIT_CENTER.z,{r:1.2,mass:0,color:0x69bcff});for(let i=0;i<9;i++){const t=i*Math.PI*2/9,r=3+i*.4,b=spawn('sphere',ORBIT_CENTER.x+r*Math.cos(t),ORBIT_CENTER.y,ORBIT_CENTER.z+r*Math.sin(t),{r:.26,orbit:true});const v=orbitVelocity(r,t);b.velocity.set(v.x,v.y,v.z);state.orbiters.push(b)}}
+setPlaying(true)}
+document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>preset(b.dataset.preset));
+const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();let down=null;
+renderer.domElement.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY,button:e.button}});
+renderer.domElement.addEventListener('pointerup',e=>{if(!down||down.button!==0||Math.hypot(e.clientX-down.x,e.clientY-down.y)>6){down=null;return}down=null;const rect=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(pointer,camera);const pos=new THREE.Vector3();if(ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),0),pos)){spawn(state.shape,pos.x,7,pos.z);updateStatus()}});
+$('collapse').onclick=()=>{$('panel').style.display='none';$('hide').style.display='block'};$('hide').onclick=()=>{$('panel').style.display='block';$('hide').style.display='none'};
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+function applyOrbitGravity(){for(const b of state.orbiters){const force=orbitForce(b.position,b.mass);b.force.set(force.x,force.y,force.z);b.wakeUp()}}
+let prev=performance.now(),acc=0,frames=0,elapsed=0;
+function loop(now){
+ requestAnimationFrame(loop);
+ const actualDt=Math.max(0,(now-prev)/1000),dt=Math.min(actualDt,.05);prev=now;
+ if(state.playing){acc+=dt;let count=0;while(acc>=1/60&&count++<3){if(state.orbiters.length)applyOrbitGravity();world.step(1/60);acc-=1/60}}
+ for(const {mesh,body} of state.items){mesh.position.copy(body.position);mesh.quaternion.copy(body.quaternion)}
+ controls.update();renderer.render(scene,camera);
+ frames++;elapsed+=actualDt;if(elapsed>=1){state.lastFps=Math.round(frames/elapsed);$('fps').textContent='FPS: '+state.lastFps;frames=0;elapsed=0}
+}
+requestAnimationFrame(loop);
+</script></body></html>

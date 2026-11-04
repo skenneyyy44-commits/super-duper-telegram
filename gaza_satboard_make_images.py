@@ -1,13 +1,12 @@
 """
 gaza_satboard_make_images.py
 Run on your machine or in Colab. Produces:
- - pre_post_ndvi_pretty_pre.png
- - pre_post_ndvi_pretty_post.png
- - pre_post_side_by_side.png
- - (optional) answer_updated.pptx (with images embedded)
+ - pre_combined.png
+ - post_combined.png
+ - gaza_satboard_images.pptx
 
 Dependencies (pip):
-pip install pystac-client rasterio rioxarray matplotlib numpy pillow python-pptx affine requests tqdm pystac
+    pip install pystac-client rasterio matplotlib numpy python-pptx pyproj
 
 Notes:
 - Uses the public STAC endpoint: https://earth-search.aws.element84.com/v0
@@ -15,19 +14,14 @@ Notes:
 - If you run in Colab, mount / ensure internet access.
 """
 
-import os, sys, math, requests
+import os
 import numpy as np
 import rasterio
-import rioxarray as rxr
 import matplotlib.pyplot as plt
-from matplotlib_scalebar.scalebar import ScaleBar  # optional (pip install matplotlib-scalebar)
 from pystac_client import Client
-from shapely.geometry import box, Point
-from shapely.ops import transform
 from pyproj import Transformer
 from pptx import Presentation
 from pptx.util import Inches
-from tqdm import tqdm
 
 # ------- USER PARAMETERS -------
 BBOX = [34.21870, 31.22005, 34.56780, 31.59454]  # [minLon,minLat,maxLon,maxLat]
@@ -149,7 +143,8 @@ def plot_and_save(rgb, ndvi, transform, crs, out_prefix, item, bbox, annotations
     fig, axes = plt.subplots(1,2, figsize=(16,9))
     # show RGB
     axes[0].imshow(np.clip(rgb,0,1))
-    axes[0].set_title(f"RGB (Sentinel-2 L2A) {item.properties.get('datetime')[:10]}")
+    captured = item.properties.get("datetime") or ""
+    axes[0].set_title(f"RGB (Sentinel-2 L2A) {captured[:10]}")
     # NDVI plot
     im = axes[1].imshow(ndvi, vmin=-1, vmax=1, cmap='RdYlGn')
     axes[1].set_title("NDVI")

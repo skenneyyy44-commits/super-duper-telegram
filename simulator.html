@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seismic Architecture Lab</title>
+    <style>
+        :root {
+            --bg-color: #050608;
+            --panel-bg: rgba(15, 20, 25, 0.9);
+            --text-main: #d0d0d0;
+            --accent: #00f0ff;
+            --warning: #ffcc00;
+            --danger: #ff3333;
+        }
+        
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: var(--bg-color); 
+            font-family: 'Roboto Mono', monospace; 
+            color: var(--text-main);
+            user-select: none;
+        }
+
+        #canvas-container { width: 100vw; height: 100vh; }
+
+        /* Scientific HUD */
+        #dashboard {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 180px;
+            background: linear-gradient(to top, #000 0%, transparent 100%);
+            display: flex;
+            align-items: flex-end;
+            padding: 20px;
+            box-sizing: border-box;
+            pointer-events: none;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border-left: 2px solid var(--accent);
+            padding: 15px;
+            margin-right: 20px;
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+            border-radius: 0 4px 4px 0;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .data-readout {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 160px;
+        }
+
+        .label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #888;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-main);
+            font-feature-settings: "tnum";
+        }
+
+        .value.alert { color: var(--danger); text-shadow: 0 0 10px rgba(255, 51, 51, 0.5); }
+        .value.warn { color: var(--warning); }
+
+        #seismograph-wrapper {
+            position: relative;
+            width: 400px;
+            height: 100px;
+            background: #020202;
+            border: 1px solid #333;
+        }
+
+        canvas#seismograph {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #overlay-grid {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: 
+                linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            pointer-events: none;
+        }
+
+        #status-bar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            gap: 20px;
+            pointer-events: none;
+        }
+
+        .status-item {
+            background: rgba(10,10,10,0.8);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid rgba(255,255,255,0.15);
+            backdrop-filter: blur(4px);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        .legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(10,10,10,0.8);
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.15);
+            text-align: right;
+            backdrop-filter: blur(4px);
+            pointer-events: none;
+        }
+        .legend-item {
+            font-size: 11px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+        .color-box { width: 12px; height: 12px; border-radius: 2px; }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #444;
+        }
+        .dot.active { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+        .dot.warning { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
+        .instruction-toast {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 240, 255, 0.1);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 8px 16px;
+            font-size: 12px;
+            border-radius: 20px;
+            pointer-events: none;
+            opacity: 0.8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+    </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+                "cannon-es": "https://esm.sh/cannon-es@0.20.0",
+                "tweakpane": "https://esm.sh/tweakpane@4.0.3"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <div class="instruction-toast">Shift + Click to Set Epicenter</div>
+
+    <!-- Top Status Bar -->
+    <div id="status-bar">
+        <div class="status-item">
+            <div class="dot active" id="sim-status"></div>
+            SIMULATION ONLINE
+        </div>
+        <div class="status-item">
+            <div class="dot" id="quake-status"></div>
+            SEISMIC STATUS: IDLE
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+        <div class="label" style="margin-bottom: 10px; color: #fff;">Structural Stress (G-Load)</div>
+        <div class="legend-item">Nominal <div class="color-box" style="background: #e0e0e0;"></div></div>
+        <div class="legend-item">Warning (>0.1g) <div class="color-box" style="background: #ffcc00;"></div></div>
+        <div class="legend-item">Critical (>0.5g) <div class="color-box" style="background: #ff3333;"></div></div>
+        
+        <div class="label" style="margin-top: 15px; margin-bottom: 10px; color: #fff;">Site Amplification</div>
+        <div class="legend-item">Basin (Soft Soil - 1.5x) <div class="color-box" style="background: #112233;"></div></div>
+        <div class="legend-item">Highlands (Bedrock - 0.7x) <div class="color-box" style="background: #335544;"></div></div>
+    </div>
+
+    <!-- Bottom Dashboard -->
+    <div id="dashboard">
+        <!-- Live Seismograph -->
+        <div class="panel">
+            <div class="label" style="margin-bottom: 8px;">Station: SC-01 (Basin Center)</div>
+            <div id="seismograph-wrapper">
+                <div id="overlay-grid"></div>
+                <canvas id="seismograph" width="400" height="100"></canvas>
+            </div>
+        </div>
+
+        <!-- Readouts -->
+        <div class="panel data-readout">
+            <div>
+                <span class="label">Est. Magnitude</span>
+                <div class="value" id="val-mag">--</div>
+            </div>
+            <div style="margin-top: 10px;">
+                <span class="label">Peak Acceleration</span>
+                <div class="value" id="val-pga">0.00 g</div>
+            </div>
+        </div>
+        
+        <div class="panel data-readout">
+            <div>
+                <span class="label">Target Coordinates</span>
+                <div class="value" id="val-coords" style="font-size: 14px;">AUTO</div>
+            </div>
+            <div style="margin-top: 10px;">
+                <span class="label">Hypocenter Depth</span>
+                <div class="value" id="val-depth">-- km</div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import * as CANNON from 'cannon-es';
+        import { Pane } from 'tweakpane';
+
+        // ==========================================
+        // 1. SCIENTIFIC CONSTANTS & CONFIG
+        // ==========================================
+
+        const CONFIG = {
+            worldSize: 120,    
+            resolution: 128,   
+            scale: 120 / 127   
+        };
+
+        const SEISMIC = {
+            P_VELOCITY: 30.0,    
+            S_VELOCITY: 18.0,
+            SURF_VELOCITY: 15.0,
+            ATTENUATION: 0.05
+        };
+
+        // ==========================================
+        // 2. PROCEDURAL TERRAIN LOGIC
+        // ==========================================
+        
+        function pseudoNoise(x, z) {
+            return Math.sin(x * 0.1) * Math.cos(z * 0.1) * 2 + Math.sin(x * 0.3 + z * 0.2) * 1;
+        }
+
+        function getTerrainHeight(x, z) {
+            const dist = Math.sqrt(x*x + z*z);
+            let basinFactor = Math.max(0, dist - 35) / 15; 
+            basinFactor = Math.pow(basinFactor, 1.5); 
+            const noise = pseudoNoise(x, z);
+            
+            let h = basinFactor * 8.0; 
+            if (dist > 40) h += noise;
+            
+            return Math.max(0, h);
+        }
+
+        // ==========================================
+        // 3. PHYSICS & SITE AMPLIFICATION
+        // ==========================================
+
+        function calculateGroundMotion(x, z, y, time, quake) {
+            if (!quake.active || time < quake.startTime) return { disp: 0, vel: 0, accel: 0 };
+
+            const dx = x - quake.epicenter.x;
+            const dz = z - quake.epicenter.y;
+            const dist = Math.sqrt(dx*dx + dz*dz + (quake.depth * 0.2)**2);
+            
+            const t = time - quake.startTime;
+            if (t < 0) return { disp: 0, vel: 0, accel: 0 };
+
+            let totalDisp = 0;
+            const amplitudeScale = Math.pow(10, quake.magnitude - 5.0) * 0.15;
+
+            // Site Amplification Logic
+            let siteFactor = 1.0;
+            if (y < 2.0) siteFactor = 1.5; // Basin amplification
+            else if (y > 8.0) siteFactor = 0.7; // Bedrock attenuation
+
+            const wave = (speed, freq, ampFactor) => {
+                const arrival = dist / speed;
+                if (t < arrival) return 0;
+                
+                const localT = t - arrival;
+                const envelope = (localT) * Math.exp(-localT * 2.5);
+                const decay = Math.exp(-dist * SEISMIC.ATTENUATION) / (Math.pow(dist, 0.4) + 1.0);
+                
+                return amplitudeScale * siteFactor * ampFactor * decay * envelope * Math.sin(18 * freq * localT);
+            };
+
+            if (quake.waves.p) totalDisp += wave(SEISMIC.P_VELOCITY, 2.5, 0.15);
+            if (quake.waves.s) totalDisp += wave(SEISMIC.S_VELOCITY, 1.5, 0.6);
+            if (quake.waves.surf) totalDisp += wave(SEISMIC.SURF_VELOCITY, 0.8, 1.2);
+
+            return {
+                disp: totalDisp,
+                accel: totalDisp * 45.0 
+            };
+        }
+
+        // ==========================================
+        // 4. SHADER: LIDAR/DEM TERRAIN
+        // ==========================================
+        const LabTerrainShader = {
+            vertex: `
+                uniform float uTime;
+                uniform float uStartTime;
+                uniform vec2 uEpicenter;
+                uniform float uMagnitude;
+                uniform float uDepth;
+                uniform vec3 uWaveParams;
+                uniform vec3 uWaveEnabled;
+
+                varying float vDisplacement;
+                varying float vBaseHeight;
+                varying vec2 vUv;
+                varying float vDist;
+                varying vec3 vWorldPos;
+
+                float getWave(float dist, float speed, float freq, float amp) {
+                    float t = uTime - uStartTime;
+                    float arrival = dist / speed;
+                    if (t < arrival) return 0.0;
+                    
+                    float localT = t - arrival;
+                    float scale = pow(10.0, uMagnitude - 5.0) * 0.15;
+                    float envelope = localT * exp(-localT * 2.5);
+                    float decay = exp(-dist * 0.05) / (pow(dist, 0.4) + 1.0);
+                    
+                    return scale * amp * decay * envelope * sin(18.0 * freq * localT);
+                }
+
+                void main() {
+                    vUv = uv;
+                    vec3 pos = position; 
+                    vBaseHeight = pos.y; 
+                    
+                    float dX = pos.x - uEpicenter.x;
+                    float dZ = pos.z - uEpicenter.y;
+                    float dist = sqrt(dX*dX + dZ*dZ + pow(uDepth * 0.2, 2.0));
+                    vDist = dist;
+
+                    float h = 0.0;
+                    if (uStartTime > 0.0) {
+                        if(uWaveEnabled.x > 0.5) h += getWave(dist, uWaveParams.x, 2.5, 0.15);
+                        if(uWaveEnabled.y > 0.5) h += getWave(dist, uWaveParams.y, 1.5, 0.6);
+                        if(uWaveEnabled.z > 0.5) h += getWave(dist, uWaveParams.z, 0.8, 1.2);
+                    }
+
+                    pos.y += h; 
+                    vDisplacement = h;
+                    vWorldPos = (modelMatrix * vec4(pos, 1.0)).xyz;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                }
+            `,
+            fragment: `
+                varying float vDisplacement;
+                varying float vBaseHeight;
+                varying vec2 vUv;
+                varying float vDist;
+                varying vec3 vWorldPos;
+
+                void main() {
+                    // Grid
+                    float gridSize = 60.0;
+                    float gx = abs(fract(vWorldPos.x / 10.0) - 0.5);
+                    float gy = abs(fract(vWorldPos.z / 10.0) - 0.5);
+                    float grid = 1.0 - smoothstep(0.48, 0.5, max(gx, gy));
+                    
+                    // Hypsometric Tint
+                    vec3 colLow = vec3(0.05, 0.1, 0.15);  
+                    vec3 colMid = vec3(0.2, 0.35, 0.25); 
+                    vec3 colHigh = vec3(0.8, 0.8, 0.85); 
+
+                    float heightNorm = smoothstep(0.0, 15.0, vBaseHeight);
+                    vec3 terrainColor = mix(colLow, colMid, smoothstep(0.0, 0.4, heightNorm));
+                    terrainColor = mix(terrainColor, colHigh, smoothstep(0.4, 1.0, heightNorm));
+
+                    vec3 color = mix(terrainColor, vec3(0.5), grid * 0.15);
+
+                    // Wave Vis
+                    float intensity = abs(vDisplacement) * 5.0;
+                    intensity = clamp(intensity, 0.0, 1.0);
+                    
+                    if (intensity > 0.01) {
+                        vec3 waveCol = mix(vec3(0.0, 1.0, 1.0), vec3(1.0, 1.0, 0.0), intensity);
+                        waveCol = mix(waveCol, vec3(1.0, 0.0, 0.0), smoothstep(0.5, 1.0, intensity));
+                        color = mix(color, waveCol, intensity * 0.6);
+                        
+                        float contour = 1.0 - smoothstep(0.4, 0.5, abs(fract(intensity * 5.0) - 0.5));
+                        color += vec3(1.0) * contour * 0.3 * intensity;
+                    }
+
+                    // Epicenter Marker
+                    if (vDist < 1.0) {
+                        color = mix(color, vec3(1.0, 0.2, 0.2), 0.9);
+                    }
+                    
+                    float depth = gl_FragCoord.z / gl_FragCoord.w;
+                    float fogFactor = smoothstep(40.0, 120.0, depth);
+                    color = mix(color, vec3(0.05, 0.06, 0.08), fogFactor);
+
+                    gl_FragColor = vec4(color, 1.0);
+                }
+            `
+        };
+
+        // ==========================================
+        // 5. MAIN SIMULATION CLASS
+        // ==========================================
+
+        class SeismicLab {
+            constructor() {
+                this.time = 0;
+                this.buildings = [];
+                this.raycaster = new THREE.Raycaster();
+                this.pointer = new THREE.Vector2();
+                this.manualEpicenter = null; // Coordinates if set by user
+
+                this.activeQuake = {
+                    active: false,
+                    startTime: -1,
+                    magnitude: 7.0,
+                    depth: 20,
+                    epicenter: { x: 0, y: 0 },
+                    waves: { p: true, s: true, surf: true }
+                };
+
+                this.params = {
+                    magnitude: 7.2,
+                    depth: 15,
+                    pWave: true,
+                    sWave: true,
+                    surfWave: true,
+                    trigger: () => this.triggerQuake(),
+                    reset: () => this.resetScene()
+                };
+
+                this.initEngine();
+                this.initMaterials(); // NEW: Physics Materials
+                this.initWorld();
+                this.initInteraction();
+                this.initUI();
+                
+                this.clock = new THREE.Clock();
+                this.animate();
+            }
+
+            initEngine() {
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                document.getElementById('canvas-container').appendChild(this.renderer.domElement);
+
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x050608);
+
+                this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 500);
+                this.camera.position.set(0, 60, 80);
+                this.camera.lookAt(0, 0, 0);
+
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.05;
+                this.controls.maxPolarAngle = Math.PI / 2 - 0.1;
+
+                this.world = new CANNON.World();
+                this.world.gravity.set(0, -9.82, 0);
+                this.world.broadphase = new CANNON.SAPBroadphase(this.world);
+                this.world.solver.iterations = 10;
+                this.world.solver.tolerance = 0.001;
+                
+                const ambient = new THREE.AmbientLight(0x404040); 
+                this.scene.add(ambient);
+
+                const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+                sun.position.set(50, 80, 30);
+                sun.castShadow = true;
+                sun.shadow.mapSize.set(2048, 2048);
+                sun.shadow.camera.left = -70;
+                sun.shadow.camera.right = 70;
+                sun.shadow.camera.top = 70;
+                sun.shadow.camera.bottom = -70;
+                this.scene.add(sun);
+            }
+
+            initMaterials() {
+                // High friction material to stop "ice sliding"
+                this.concreteMat = new CANNON.Material();
+                this.groundMat = new CANNON.Material();
+                
+                const contactMat = new CANNON.ContactMaterial(this.groundMat, this.concreteMat, {
+                    friction: 0.9,
+                    restitution: 0.1 // Low bounce
+                });
+                
+                this.world.addContactMaterial(contactMat);
+            }
+
+            initWorld() {
+                const size = CONFIG.resolution;
+                const matrix = [];
+                
+                const planeGeo = new THREE.PlaneGeometry(CONFIG.worldSize, CONFIG.worldSize, size - 1, size - 1);
+                planeGeo.rotateX(-Math.PI / 2);
+
+                const vertices = planeGeo.attributes.position.array;
+                
+                for (let i = 0; i < size; i++) {
+                    matrix.push([]);
+                    for (let j = 0; j < size; j++) {
+                        const x = (i / (size - 1) - 0.5) * CONFIG.worldSize;
+                        const z = (j / (size - 1) - 0.5) * CONFIG.worldSize;
+                        
+                        const h = getTerrainHeight(x, -z); 
+                        matrix[i].push(h);
+                        
+                        const vIndex = (i * size + j) * 3;
+                        vertices[vIndex + 1] = getTerrainHeight(vertices[vIndex], vertices[vIndex + 2]);
+                    }
+                }
+                
+                planeGeo.computeVertexNormals();
+
+                this.terrainUniforms = {
+                    uTime: { value: 0 },
+                    uStartTime: { value: -100 },
+                    uEpicenter: { value: new THREE.Vector2(0, 0) },
+                    uMagnitude: { value: 0 },
+                    uDepth: { value: 0 },
+                    uWaveParams: { value: new THREE.Vector3(SEISMIC.P_VELOCITY, SEISMIC.S_VELOCITY, SEISMIC.SURF_VELOCITY) },
+                    uWaveEnabled: { value: new THREE.Vector3(1, 1, 1) }
+                };
+
+                const planeMat = new THREE.ShaderMaterial({
+                    uniforms: this.terrainUniforms,
+                    vertexShader: LabTerrainShader.vertex,
+                    fragmentShader: LabTerrainShader.fragment,
+                    wireframe: false
+                });
+
+                this.terrain = new THREE.Mesh(planeGeo, planeMat);
+                this.terrain.receiveShadow = true;
+                this.scene.add(this.terrain);
+
+                const hfShape = new CANNON.Heightfield(matrix, {
+                    elementSize: CONFIG.worldSize / (size - 1)
+                });
+                
+                const hfBody = new CANNON.Body({ mass: 0, material: this.groundMat }); 
+                hfBody.addShape(hfShape);
+                hfBody.position.set(-CONFIG.worldSize/2, 0, CONFIG.worldSize/2); 
+                hfBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+                this.world.addBody(hfBody);
+
+                // Target Marker (Hidden by default)
+                const ringGeo = new THREE.RingGeometry(1, 1.5, 32);
+                ringGeo.rotateX(-Math.PI / 2);
+                const ringMat = new THREE.MeshBasicMaterial({ 
+                    color: 0xff3333, 
+                    transparent: true, 
+                    opacity: 0.8,
+                    side: THREE.DoubleSide
+                });
+                this.targetMarker = new THREE.Mesh(ringGeo, ringMat);
+                this.targetMarker.visible = false;
+                this.scene.add(this.targetMarker);
+
+                this.generateCity();
+            }
+
+            generateCity() {
+                this.buildings.forEach(b => {
+                    this.scene.remove(b.mesh);
+                    this.world.removeBody(b.body);
+                });
+                this.buildings = [];
+
+                const baseMat = new THREE.MeshStandardMaterial({
+                    color: 0xe0e0e0,
+                    roughness: 0.8,
+                    metalness: 0.1
+                });
+
+                const blockSize = 8;
+                const range = 40;
+                
+                for(let x = -range; x <= range; x += blockSize) {
+                    for(let z = -range; z <= range; z += blockSize) {
+                        if(Math.random() > 0.85) continue;
+                        if(Math.abs(x) < 5 && Math.abs(z) < 5) continue;
+
+                        const terrainH = getTerrainHeight(x, z);
+                        if (terrainH > 2.0) continue;
+
+                        const w = blockSize * (0.4 + Math.random() * 0.4);
+                        const d = blockSize * (0.4 + Math.random() * 0.4);
+                        const h = 2 + Math.random() * 12; 
+                        
+                        const shape = new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2));
+                        const body = new CANNON.Body({
+                            mass: w * d * h * 5,
+                            position: new CANNON.Vec3(x, terrainH + h/2, z),
+                            linearDamping: 0.05,
+                            angularDamping: 0.1,
+                            material: this.concreteMat
+                        });
+                        body.addShape(shape);
+                        body.allowSleep = true; 
+                        this.world.addBody(body);
+
+                        const geo = new THREE.BoxGeometry(w, h, d);
+                        const mat = baseMat.clone();
+                        const mesh = new THREE.Mesh(geo, mat);
+                        mesh.castShadow = true;
+                        mesh.receiveShadow = true;
+                        
+                        this.scene.add(mesh);
+                        this.buildings.push({ 
+                            mesh, 
+                            body, 
+                            mat, 
+                            initialPos: body.position.clone(), 
+                            initialQuat: body.quaternion.clone() 
+                        });
+                    }
+                }
+            }
+
+            initInteraction() {
+                window.addEventListener('pointerdown', (event) => {
+                    if (event.shiftKey) {
+                        this.pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+                        this.pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+                        this.raycaster.setFromCamera(this.pointer, this.camera);
+                        const intersects = this.raycaster.intersectObject(this.terrain);
+
+                        if (intersects.length > 0) {
+                            const point = intersects[0].point;
+                            this.manualEpicenter = { x: point.x, y: point.z };
+                            
+                            // Move Marker
+                            this.targetMarker.position.set(point.x, point.y + 0.5, point.z);
+                            this.targetMarker.visible = true;
+
+                            // Update UI text
+                            const coordText = `[${point.x.toFixed(1)}, ${point.z.toFixed(1)}]`;
+                            document.getElementById('val-coords').innerText = coordText;
+                            document.getElementById('val-coords').style.color = '#00f0ff';
+                        }
+                    }
+                });
+            }
+
+            initUI() {
+                const pane = new Pane({ title: 'Simulation Control' });
+                
+                const f1 = pane.addFolder({ title: 'Seismic Source' });
+                f1.addBinding(this.params, 'magnitude', { min: 4.0, max: 9.0, step: 0.1 });
+                f1.addBinding(this.params, 'depth', { min: 0, max: 50 });
+                
+                const f2 = pane.addFolder({ title: 'Phase Filters' });
+                f2.addBinding(this.params, 'pWave', { label: 'P-Wave' });
+                f2.addBinding(this.params, 'sWave', { label: 'S-Wave' });
+                f2.addBinding(this.params, 'surfWave', { label: 'Surface (R)' });
+
+                pane.addBlade({ view: 'separator' });
+                pane.addButton({ title: 'INITIATE EVENT', label: 'Trigger' }).on('click', this.params.trigger);
+                pane.addButton({ title: 'RESET SCENE', label: 'System' }).on('click', this.params.reset);
+
+                this.seismoCanvas = document.getElementById('seismograph');
+                this.seismoCtx = this.seismoCanvas.getContext('2d');
+                this.seismoData = new Array(this.seismoCanvas.width).fill(0);
+            }
+
+            triggerQuake() {
+                let ex, ey;
+
+                if (this.manualEpicenter) {
+                    ex = this.manualEpicenter.x;
+                    ey = this.manualEpicenter.y;
+                } else {
+                    // Random if no target set
+                    ex = (Math.random() - 0.5) * 40;
+                    ey = (Math.random() - 0.5) * 40;
+                }
+                
+                this.activeQuake = {
+                    active: true,
+                    startTime: this.time,
+                    magnitude: this.params.magnitude,
+                    depth: this.params.depth,
+                    epicenter: { x: ex, y: ey },
+                    waves: {
+                        p: this.params.pWave,
+                        s: this.params.sWave,
+                        surf: this.params.surfWave
+                    }
+                };
+
+                this.buildings.forEach(b => b.body.wakeUp());
+
+                this.terrainUniforms.uStartTime.value = this.activeQuake.startTime;
+                this.terrainUniforms.uEpicenter.value.set(this.activeQuake.epicenter.x, this.activeQuake.epicenter.y);
+                this.terrainUniforms.uMagnitude.value = this.activeQuake.magnitude;
+                this.terrainUniforms.uDepth.value = this.activeQuake.depth;
+                this.terrainUniforms.uWaveEnabled.value.set(
+                    this.params.pWave ? 1 : 0, 
+                    this.params.sWave ? 1 : 0, 
+                    this.params.surfWave ? 1 : 0
+                );
+
+                const status = document.getElementById('quake-status');
+                status.classList.add('warning');
+                status.innerText = "SEISMIC EVENT: ACTIVE";
+                document.getElementById('val-mag').innerText = this.activeQuake.magnitude.toFixed(1) + " Mw";
+                document.getElementById('val-depth').innerText = this.activeQuake.depth.toFixed(1) + " km";
+            }
+
+            resetScene() {
+                this.activeQuake.active = false;
+                this.terrainUniforms.uStartTime.value = -999;
+                
+                const status = document.getElementById('quake-status');
+                status.classList.remove('warning');
+                status.innerText = "SEISMIC STATUS: IDLE";
+                
+                document.getElementById('val-pga').innerText = "0.00 g";
+                document.getElementById('val-pga').className = "value";
+
+                const baseCol = new THREE.Color(0xe0e0e0);
+                this.buildings.forEach(b => {
+                    b.body.position.copy(b.initialPos);
+                    b.body.quaternion.copy(b.initialQuat);
+                    b.body.velocity.set(0,0,0);
+                    b.body.angularVelocity.set(0,0,0);
+                    b.body.sleep();
+                    b.mat.color.copy(baseCol);
+                });
+            }
+
+            updatePhysics() {
+                this.world.fixedStep();
+
+                if (this.activeQuake.active) {
+                    let peakAccel = 0;
+                    
+                    const colSafe = new THREE.Color(0xe0e0e0);
+                    const colWarn = new THREE.Color(0xffcc00);
+                    const colDanger = new THREE.Color(0xff3333);
+
+                    this.buildings.forEach(b => {
+                        const res = calculateGroundMotion(
+                            b.body.position.x, 
+                            b.body.position.z, 
+                            b.initialPos.y, 
+                            this.time, 
+                            this.activeQuake
+                        );
+
+                        const absAccel = Math.abs(res.accel);
+                        if (absAccel > peakAccel) peakAccel = absAccel;
+
+                        // NEW PHYSICS: Directional forces
+                        if (absAccel > 0.05) {
+                            // Calculate Direction Vector from Epicenter
+                            const dx = b.body.position.x - this.activeQuake.epicenter.x;
+                            const dz = b.body.position.z - this.activeQuake.epicenter.y;
+                            const dist = Math.sqrt(dx*dx + dz*dz) + 0.001; // Avoid div0
+                            
+                            // Normal Vectors
+                            const nx = dx / dist;
+                            const nz = dz / dist;
+
+                            // Radial Force (Push/Pull away from epicenter) - P-wave & Surface
+                            const fRadial = res.accel * b.body.mass * 0.6;
+                            
+                            // Transverse Force (Shear perpendicular to direction) - S-wave
+                            // Simple shear: (-nz, nx)
+                            const fShear = res.accel * b.body.mass * 0.3 * Math.sin(this.time * 10); 
+
+                            // Vertical Force (Kick)
+                            const fVert = res.accel * b.body.mass * 0.8;
+
+                            // Combine
+                            const fx = (nx * fRadial) + (-nz * fShear);
+                            const fz = (nz * fRadial) + (nx * fShear);
+
+                            // Apply at Center of Mass (High Friction prevents sliding, causing tipping)
+                            b.body.applyForce(new CANNON.Vec3(fx, fVert, fz));
+                        }
+
+                        // Stress Visual
+                        const stress = Math.min(absAccel / 8.0, 1.0); 
+                        
+                        if (stress < 0.05) {
+                            b.mat.color.lerp(colSafe, 0.1);
+                        } else if (stress < 0.4) {
+                            b.mat.color.lerp(colWarn, 0.2);
+                        } else {
+                            b.mat.color.lerp(colDanger, 0.3);
+                        }
+
+                        b.mesh.position.copy(b.body.position);
+                        b.mesh.quaternion.copy(b.body.quaternion);
+                    });
+
+                    const pgaG = peakAccel / 9.8; 
+                    const elPga = document.getElementById('val-pga');
+                    elPga.innerText = pgaG.toFixed(2) + " g";
+                    
+                    if(pgaG > 0.5) elPga.className = "value alert";
+                    else if (pgaG > 0.1) elPga.className = "value warn";
+                    else elPga.className = "value";
+                }
+            }
+
+            updateSeismograph() {
+                this.seismoData.shift();
+                // Measure at (0,0) with y=0 (Basin)
+                const sample = calculateGroundMotion(0, 0, 0, this.time, this.activeQuake);
+                this.seismoData.push(sample.disp);
+
+                const ctx = this.seismoCtx;
+                const w = this.seismoCanvas.width;
+                const h = this.seismoCanvas.height;
+
+                ctx.clearRect(0, 0, w, h);
+                ctx.beginPath();
+                ctx.strokeStyle = '#00f0ff'; 
+                ctx.lineWidth = 1.5;
+
+                for (let i = 0; i < w; i++) {
+                    const val = this.seismoData[i] * 40; 
+                    const y = (h / 2) - val;
+                    if (i === 0) ctx.moveTo(i, y);
+                    else ctx.lineTo(i, y);
+                }
+                ctx.stroke();
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                const dt = this.clock.getDelta();
+                this.time += dt;
+
+                this.terrainUniforms.uTime.value = this.time;
+                this.updatePhysics();
+                this.updateSeismograph();
+                this.controls.update();
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        window.onload = () => { window.app = new SeismicLab(); };
+
+        window.addEventListener('resize', () => {
+            if (window.app) {
+                window.app.camera.aspect = window.innerWidth / window.innerHeight;
+                window.app.camera.updateProjectionMatrix();
+                window.app.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+
+    </script>
+</body>
+</html>
