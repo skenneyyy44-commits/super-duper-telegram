@@ -128,7 +128,7 @@ def test_db_dir_exists():
     assert os.path.isdir(flask_app.config['DB_DIR'])
 
 
-def test_data_manager_stops_after_request_using_fallback(monkeypatch):
+def test_data_manager_survives_requests_and_stops_at_shutdown_using_fallback(monkeypatch):
     # Load a separate module with Flask unavailable; preserve the real backend.
     import importlib.util
 
@@ -149,6 +149,8 @@ def test_data_manager_stops_after_request_using_fallback(monkeypatch):
 
     monkeypatch.setattr(fallback_app, "DataManager", TrackingDataManager)
 
+    shutdown_callbacks = []
+    monkeypatch.setattr(fallback_app.atexit, "register", shutdown_callbacks.append)
     flask_app = fallback_app.create_app()
     assert tracked, "DataManager instance should be created"
     data_manager = tracked[0]
@@ -157,6 +159,11 @@ def test_data_manager_stops_after_request_using_fallback(monkeypatch):
     client = flask_app.test_client()
     resp = client.get('/healthz')
     assert resp.status_code == 200
+    assert data_manager.started is True
+    assert client.get("/healthz").status_code == 200
+    assert data_manager.started is True
+    assert len(shutdown_callbacks) == 1
+    shutdown_callbacks[0]()
     assert data_manager.started is False
 
 
