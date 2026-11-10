@@ -1,3 +1,4 @@
+import atexit
 import json
 import os
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
@@ -303,10 +304,8 @@ def create_app():
             return _send_resolved_static_file(static_folder, index_file)
         return "index.html not found", 404
 
-    @app.teardown_appcontext
-    def cleanup(exception=None):
-        if data_manager.started:
-            data_manager.stop()
+    # The manager belongs to the process, not an individual request context.
+    atexit.register(data_manager.stop)
 
     return app
 
