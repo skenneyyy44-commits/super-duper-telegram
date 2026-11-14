@@ -11,6 +11,7 @@ const appId = resolveAppId();
 export const AddPlantModal = ({ firestore, userId, onClose }) => {
   const [name, setName] = useState('');
   const [species, setSpecies] = useState('');
+  const [wateringIntervalDays, setWateringIntervalDays] = useState('7');
   const [previewImage, setPreviewImage] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -36,11 +37,14 @@ export const AddPlantModal = ({ firestore, userId, onClose }) => {
 
       try {
         const path = `/artifacts/${appId}/users/${userId}/plants`;
+        const now = Timestamp.now();
         await addDoc(collection(firestore, path), {
           name: name.trim(),
           species: species.trim(),
           profileImageBase64: previewImage,
-          createdAt: Timestamp.now(),
+          wateringIntervalDays: Number(wateringIntervalDays) || 7,
+          lastWateredAt: now,
+          createdAt: now,
         });
         onClose();
       } catch (saveError) {
@@ -50,7 +54,7 @@ export const AddPlantModal = ({ firestore, userId, onClose }) => {
         setIsSaving(false);
       }
     },
-    [firestore, name, onClose, previewImage, species, userId],
+    [firestore, name, onClose, previewImage, species, userId, wateringIntervalDays],
   );
 
   return (
@@ -75,6 +79,18 @@ export const AddPlantModal = ({ firestore, userId, onClose }) => {
             onChange={(event) => setSpecies(event.target.value)}
             placeholder="Optional"
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+          />
+        </div>
+        <div>
+          <label className="block mb-1 text-sm font-semibold text-gray-700">Water every ___ days</label>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={wateringIntervalDays}
+            onChange={(event) => setWateringIntervalDays(event.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            required
           />
         </div>
         <FileUploader
