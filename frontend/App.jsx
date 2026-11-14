@@ -83,6 +83,8 @@ export default function App() {
           plants={plants}
           onSelectPlant={setSelectedPlantId}
           onAddPlant={() => setIsAddModalOpen(true)}
+          firestore={firestore}
+          userId={user.uid}
         />
       )}
 
