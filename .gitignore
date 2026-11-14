@@ -5,3 +5,7 @@ __pycache__/
 node_modules/
 frontend/node_modules/
 .DS_Store
+.venv/
+.pytest_cache/
+dist/
+.env*
